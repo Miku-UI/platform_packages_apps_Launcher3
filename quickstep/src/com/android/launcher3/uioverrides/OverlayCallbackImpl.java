@@ -17,14 +17,18 @@
 package com.android.launcher3.uioverrides;
 
 import android.app.Activity;
+import android.app.Application;
 import android.content.SharedPreferences;
+import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.os.Bundle;
+import android.view.MotionEvent;
+import android.view.View;
 
-import com.android.launcher3.LauncherPrefs;
+import com.android.launcher3.DeviceProfile;
+import com.android.launcher3.DeviceProfile.OnDeviceProfileChangeListener;
 import com.android.launcher3.Launcher;
 import com.android.systemui.plugins.shared.LauncherOverlayManager;
-import com.android.systemui.plugins.shared.LauncherOverlayManager.LauncherOverlay;
-import com.android.systemui.plugins.shared.LauncherOverlayManager.LauncherOverlayCallbacks;
+import com.android.systemui.plugins.shared.LauncherOverlayManager.LauncherOverlayTouchProxy;
 
 import com.google.android.libraries.gsa.launcherclient.LauncherClient;
 import com.google.android.libraries.gsa.launcherclient.LauncherClientCallbacks;
@@ -32,15 +36,16 @@ import com.google.android.libraries.gsa.launcherclient.LauncherClientCallbacks;
 import java.io.PrintWriter;
 
 /**
- * Implements {@link LauncherOverlay} and passes all the corresponding events to {@link
+ * Implements {@link LauncherOverlayTouchProxy} and passes all the corresponding events to {@link
  * LauncherClient}. {@see setClient}
  *
  * <p>Implements {@link LauncherClientCallbacks} and sends all the corresponding callbacks to {@link
  * Launcher}.
  */
 public class OverlayCallbackImpl
-        implements LauncherOverlay, LauncherClientCallbacks, LauncherOverlayManager,
-        SharedPreferences.OnSharedPreferenceChangeListener {
+        implements LauncherClientCallbacks, LauncherOverlayManager, LauncherOverlayTouchProxy,
+        OnSharedPreferenceChangeListener, OnDeviceProfileChangeListener,
+        Application.ActivityLifecycleCallbacks, View.OnAttachStateChangeListener {
 
     private static final String KEY_ENABLE_MINUS_ONE = "pref_enable_minus_one";
 
@@ -51,25 +56,29 @@ public class OverlayCallbackImpl
     private boolean mWasOverlayAttached = false;
 
     public OverlayCallbackImpl(Launcher launcher) {
-        SharedPreferences prefs = LauncherPrefs.getPrefs(launcher);
-
         mLauncher = launcher;
+        SharedPreferences prefs = mLauncher.getSharedPrefs();
         mClient = new LauncherClient(mLauncher, this, getClientOptions(prefs));
+        mLauncher.setLauncherOverlay(this);
+
         prefs.registerOnSharedPreferenceChangeListener(this);
+        mLauncher.addOnDeviceProfileChangeListener(this);
+        mLauncher.registerActivityLifecycleCallbacks(this);
+        mLauncher.getWindow().getDecorView().addOnAttachStateChangeListener(this);
     }
 
     @Override
-    public void onDeviceProvideChanged() {
+    public void onDeviceProfileChanged(DeviceProfile dp) {
         mClient.reattachOverlay();
     }
 
     @Override
-    public void onAttachedToWindow() {
+    public void onViewAttachedToWindow(View view) {
         mClient.onAttachedToWindow();
     }
 
     @Override
-    public void onDetachedFromWindow() {
+    public void onViewDetachedFromWindow(View view) {
         mClient.onDetachedFromWindow();
     }
 
@@ -94,29 +103,54 @@ public class OverlayCallbackImpl
     }
 
     @Override
-    public void onActivityStarted() {
-        mClient.onStart();
-    }
+    public void onActivityCreated(Activity activity, Bundle bundle) { }
 
     @Override
-    public void onActivityResumed() {
-        mClient.onResume();
-    }
+    public void onActivityDestroyed(Activity activity) { }
 
     @Override
-    public void onActivityPaused() {
+    public void onActivitySaveInstanceState(Activity activity, Bundle bundle) { }
+
+    @Override
+    public void onActivityPaused(Activity activity) {
         mClient.onPause();
     }
 
     @Override
-    public void onActivityStopped() {
+    public void onActivityResumed(Activity activity) {
+        mClient.onResume();
+    }
+
+    @Override
+    public void onActivityStarted(Activity activity) {
+        mClient.onStart();
+    }
+
+    @Override
+    public void onActivityStopped(Activity activity) {
         mClient.onStop();
+    }
+
+    @Override
+    public void onFlingVelocity(float velocity) { }
+
+    @Override
+    public void onOverlayMotionEvent(MotionEvent ev, float scrollProgress) {
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN -> mClient.startMove();
+            case MotionEvent.ACTION_MOVE -> mClient.updateMove(scrollProgress);
+            case MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> mClient.endMove();
+        }
     }
 
     @Override
     public void onActivityDestroyed() {
         mClient.onDestroy();
+        mLauncher.setLauncherOverlay(null);
         mLauncher.getSharedPrefs().unregisterOnSharedPreferenceChangeListener(this);
+        mLauncher.removeOnDeviceProfileChangeListener(this);
+        mLauncher.unregisterActivityLifecycleCallbacks(this);
+        mLauncher.getWindow().getDecorView().removeOnAttachStateChangeListener(this);
     }
 
     @Override
@@ -139,21 +173,6 @@ public class OverlayCallbackImpl
         if (mLauncherOverlayCallbacks != null) {
             mLauncherOverlayCallbacks.onOverlayScrollChanged(progress);
         }
-    }
-
-    @Override
-    public void onScrollInteractionBegin() {
-        mClient.startMove();
-    }
-
-    @Override
-    public void onScrollInteractionEnd() {
-        mClient.endMove();
-    }
-
-    @Override
-    public void onScrollChange(float progress, boolean rtl) {
-        mClient.updateMove(progress);
     }
 
     @Override

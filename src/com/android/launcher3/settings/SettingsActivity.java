@@ -16,6 +16,7 @@
 
 package com.android.launcher3.settings;
 
+import static android.os.Process.myUserHandle;
 import static android.provider.Settings.Global.DEVELOPMENT_SETTINGS_ENABLED;
 
 import static androidx.preference.PreferenceFragmentCompat.ARG_PREFERENCE_ROOT;
@@ -28,6 +29,7 @@ import static com.android.launcher3.util.Executors.MAIN_EXECUTOR;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.LauncherApps;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -53,7 +55,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.launcher3.BuildConfig;
 import com.android.launcher3.InvariantDeviceProfile;
-import com.android.launcher3.lineage.LineageUtils;
 import com.android.launcher3.LauncherFiles;
 import com.android.launcher3.R;
 import com.android.launcher3.display.DisplayController;
@@ -303,6 +304,7 @@ public class SettingsActivity extends FragmentActivity
          * will remove that preference from the list.
          */
         protected boolean initPreference(Preference preference) {
+            LauncherApps launcherApps = getContext().getSystemService(LauncherApps.class);
             LauncherDisplayInfo info = DisplayController.INSTANCE.get(getContext()).getInfo();
             switch (preference.getKey()) {
                 case NOTIFICATION_DOTS_PREFERENCE_KEY:
@@ -313,7 +315,8 @@ public class SettingsActivity extends FragmentActivity
                     }
                     return mDeveloperOptionsEnabled;
                 case KEY_MINUS_ONE:
-                    return LineageUtils.isPackageEnabled(getActivity(), SEARCH_PACKAGE);
+                    return launcherApps != null &&
+                            launcherApps.isPackageEnabled(SEARCH_PACKAGE, myUserHandle());
                 case FIXED_LANDSCAPE_MODE:
                     if ((InvariantDeviceProfile.INSTANCE.get(getContext()).deviceType
                                     == TYPE_MULTI_DISPLAY)
