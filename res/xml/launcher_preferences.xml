@@ -51,10 +51,16 @@
         launcher:logIdOff="616" />
 
     <SwitchPreference
+        android:defaultValue="true"
+        android:key="pref_enable_minus_one"
+        android:summary="@string/pref_show_google_now_summary"
+        android:title="@string/title_show_google_app" />
+
+    <SwitchPreference
         android:key="pref_allow_phone_taskbar"
-	android:title="@string/pref_allow_phone_taskbar"
+        android:title="@string/pref_allow_phone_taskbar"
         android:summary="@string/pref_allow_phone_taskbar_desc"
-	android:defaultValue="true"
-	android:persistent="true" />
+        android:defaultValue="true"
+        android:persistent="true" />
 
 </androidx.preference.PreferenceScreen>
