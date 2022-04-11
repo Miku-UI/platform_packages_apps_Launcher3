@@ -58,6 +58,8 @@ import java.util.Locale;
 @SuppressLint("NewApi")
 public class DeviceProfile {
 
+    public static final String KEY_PHONE_TASKBAR = "pref_allow_phone_taskbar";
+
     private static final int DEFAULT_DOT_SIZE = 100;
     private static final float ALL_APPS_TABLET_MAX_ROWS = 5.5f;
 
@@ -307,6 +309,8 @@ public class DeviceProfile {
             }
         }
 
+        boolean allowPhone = Utilities.getPrefs(context).getBoolean(KEY_PHONE_TASKBAR, false);
+        isTaskbarPresent = (isTablet || allowPhone) && ApiWrapper.TASKBAR_DRAWN_IN_PROCESS;
         if (isTaskbarPresent) {
             taskbarSize = res.getDimensionPixelSize(R.dimen.taskbar_size);
             stashedTaskbarSize = res.getDimensionPixelSize(R.dimen.taskbar_stashed_size);
