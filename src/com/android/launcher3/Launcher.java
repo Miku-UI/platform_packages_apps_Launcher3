@@ -426,6 +426,8 @@ public class Launcher extends StatefulActivity<LauncherState>
     private final CannedAnimationCoordinator mAnimationCoordinator =
             new CannedAnimationCoordinator(this);
 
+    private boolean mPendingRestart;
+
     @Override
     @TargetApi(Build.VERSION_CODES.S)
     protected void onCreate(Bundle savedInstanceState) {
@@ -724,7 +726,10 @@ public class Launcher extends StatefulActivity<LauncherState>
     }
 
     @Override
-    public void onIdpChanged(boolean modelPropertiesChanged) {
+    public void onIdpChanged(boolean modelPropertiesChanged, boolean taskbarChanged) {
+        if (taskbarChanged) {
+            mPendingRestart = true;
+        }
         onHandleConfigurationChanged();
     }
 
@@ -1270,6 +1275,10 @@ public class Launcher extends StatefulActivity<LauncherState>
 
         DragView.removeAllViews(this);
         TraceHelper.INSTANCE.endSection();
+
+        if (mPendingRestart) {
+            System.exit(0);
+        }
     }
 
     @Override

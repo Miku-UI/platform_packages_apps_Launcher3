@@ -75,6 +75,8 @@ import java.util.function.Consumer;
 @SuppressLint("NewApi")
 public class DeviceProfile {
 
+    public static final String KEY_PHONE_TASKBAR = "pref_allow_phone_taskbar";
+
     private static final int DEFAULT_DOT_SIZE = 100;
     private static final float ALL_APPS_TABLET_MAX_ROWS = 5.5f;
     private static final float MIN_FOLDER_TEXT_SIZE_SP = 16f;
@@ -361,6 +363,9 @@ public class DeviceProfile {
                 mTypeIndex = INDEX_DEFAULT;
             }
         }
+
+        boolean allowPhone = LauncherPrefs.getPrefs(context).getBoolean(KEY_PHONE_TASKBAR, true);
+        isTaskbarPresent = (isTablet || allowPhone) && ApiWrapper.TASKBAR_DRAWN_IN_PROCESS;
 
         isTransientTaskbar = DisplayController.isTransientTaskbar(context);
         if (!isTaskbarPresent) {

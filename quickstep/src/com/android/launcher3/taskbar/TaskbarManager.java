@@ -419,6 +419,8 @@ public class TaskbarManager {
                 + " [dp != null (i.e. mUserUnlocked)]=" + (dp != null)
                 + " FLAG_HIDE_NAVBAR_WINDOW=" + FLAG_HIDE_NAVBAR_WINDOW
                 + " dp.isTaskbarPresent=" + (dp == null ? "null" : dp.isTaskbarPresent));
+            SystemUiProxy sysui = SystemUiProxy.INSTANCE.get(mContext);
+            sysui.setTaskbarEnabled(isTaskbarEnabled);
             if (!isTaskbarEnabled) {
                 SystemUiProxy.INSTANCE.get(mContext)
                     .notifyTaskbarStatus(/* visible */ false, /* stashed */ false);
