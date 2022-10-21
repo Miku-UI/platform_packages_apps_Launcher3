@@ -85,8 +85,10 @@ class ShakeUtils(context: Context) : SensorEventListener {
             return
         }
         mLastShakeTime = curShakeTime
-        for (i in mOnShakeListeners!!.indices) {
-            mOnShakeListeners!![i].onShake(speed)
+	mOnShakeListeners?.let {
+            for (i in it.indices) {
+                it[i].onShake(speed)
+            }
         }
     }
 
