@@ -4115,10 +4115,13 @@ public abstract class RecentsView<ACTIVITY_TYPE extends StatefulActivity<STATE_T
         runDismissAnimation(pa);
     }
 
-    @SuppressWarnings("unused")
     private void dismissAllTasks(View view) {
         runDismissAnimation(createAllTasksDismissAnimation(DISMISS_TASK_DURATION));
         mActivity.getStatsLogManager().logger().log(LAUNCHER_TASK_CLEAR_ALL);
+    }
+
+    public void dismissAllTasks() {
+	dismissAllTasks(null);
     }
 
     private void dismissCurrentTask() {
