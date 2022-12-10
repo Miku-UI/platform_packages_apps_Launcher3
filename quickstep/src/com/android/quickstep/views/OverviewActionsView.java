@@ -134,7 +134,7 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
     @Override
     public void onVisibilityAggregated(boolean isVisible) {
 	if (isVisible) {
-	    bindShake();
+	  //  bindShake();
 	} else {
 	    unBindShake();
 	}
