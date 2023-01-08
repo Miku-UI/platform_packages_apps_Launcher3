@@ -110,25 +110,25 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
 
     public OverviewActionsView(Context context) {
         this(context, null);
-	mShakeUtils = new ShakeUtils(context);
+        mShakeUtils = new ShakeUtils(context);
     }
 
     public OverviewActionsView(Context context, @Nullable AttributeSet attrs) {
         this(context, attrs, 0);
-	mShakeUtils = new ShakeUtils(context);
+        mShakeUtils = new ShakeUtils(context);
     }
 
     public OverviewActionsView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr, 0);
-	mShakeUtils = new ShakeUtils(context);
+        mShakeUtils = new ShakeUtils(context);
     }
 
     private void bindShake() {
-	mShakeUtils.bindShakeListener(this);
+        mShakeUtils.bindShakeListener(this);
     }
 
     private void unBindShake() {
-	mShakeUtils.unBindShakeListener(this);
+        mShakeUtils.unBindShakeListener(this);
     }
 
     @Override
@@ -138,7 +138,7 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
 	} else {
 	    unBindShake();
 	}
-	super.onVisibilityAggregated(isVisible);
+        super.onVisibilityAggregated(isVisible);
     }
 
     @Override
