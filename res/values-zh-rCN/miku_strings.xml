@@ -22,4 +22,11 @@
     <string name="pref_allow_phone_taskbar">启用Miku Home任务栏！</string>
     <string name="pref_allow_phone_taskbar_desc">这下在何时何地都能快速切换应用啦</string>
 
+    <!-- Settings title to show Google Now at -1 screen on launcher. [CHAR LIMIT=50] -->
+    <string name="title_show_google_app">显示咕噜咕噜APP</string>
+    <!-- Settings message explaining when the -1 screen is available on an LTR device. [CHAR LIMIT=100] -->
+    <string name="msg_minus_one_on_left">当你从主屏幕向右滑动时</string>
+    <!-- Settings message explaining when the -1 screen is available on an RTL device. [CHAR LIMIT=100] -->
+    <string name="msg_minus_one_on_right">当你从主屏幕向左滑动时</string>
+
 </resources>
