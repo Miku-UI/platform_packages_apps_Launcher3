@@ -20,6 +20,7 @@ import android.app.Activity;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 
+import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.Launcher;
 import com.android.launcher3.Utilities;
 import com.android.systemui.plugins.shared.LauncherOverlayManager;
@@ -51,7 +52,7 @@ public class OverlayCallbackImpl
     private boolean mWasOverlayAttached = false;
 
     public OverlayCallbackImpl(Launcher launcher) {
-        SharedPreferences prefs = Utilities.getPrefs(launcher);
+        SharedPreferences prefs = LauncherPrefs.getPrefs(launcher);
 
         mLauncher = launcher;
         mClient = new LauncherClient(mLauncher, this, getClientOptions(prefs));
@@ -150,7 +151,7 @@ public class OverlayCallbackImpl
     @Override
     public void onOverlayScrollChanged(float progress) {
         if (mLauncherOverlayCallbacks != null) {
-            mLauncherOverlayCallbacks.onScrollChanged(progress);
+            mLauncherOverlayCallbacks.onOverlayScrollChanged(progress);
         }
     }
 
