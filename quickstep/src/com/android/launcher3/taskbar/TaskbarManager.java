@@ -130,7 +130,7 @@ public class TaskbarManager {
      * We use WindowManager's ComponentCallbacks() for internal UI changes (similar to an Activity)
      * which comes via a different channel
      */
-    private final OnIDPChangeListener mIdpChangeListener = c -> recreateTaskbar();
+    private final OnIDPChangeListener mIdpChangeListener = (c, d) -> recreateTaskbar();
     private final SettingsCache.OnChangeListener mOnSettingsChangeListener = c -> recreateTaskbar();
 
     private boolean mUserUnlocked = false;
