@@ -94,45 +94,6 @@ public class OverlayCallbackImpl
     }
 
     @Override
-    public boolean startSearch(byte[] config, Bundle extras) {
-        return false;
-    }
-
-    @Override
-    public void onActivityCreated(Activity activity, Bundle bundle) {
-        // Not called
-    }
-
-    @Override
-    public void onActivityStarted(Activity activity) {
-        mClient.onStart();
-    }
-
-    @Override
-    public void onActivityResumed(Activity activity) {
-        mClient.onResume();
-    }
-
-    @Override
-    public void onActivityPaused(Activity activity) {
-        mClient.onPause();
-    }
-
-    @Override
-    public void onActivityStopped(Activity activity) {
-        mClient.onStop();
-    }
-
-    @Override
-    public void onActivitySaveInstanceState(Activity activity, Bundle bundle) { }
-
-    @Override
-    public void onActivityDestroyed(Activity activity) {
-        mClient.onDestroy();
-        mLauncher.getSharedPrefs().unregisterOnSharedPreferenceChangeListener(this);
-    }
-
-    @Override
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
         if (KEY_ENABLE_MINUS_ONE.equals(key)) {
             mClient.setClientOptions(getClientOptions(prefs));
