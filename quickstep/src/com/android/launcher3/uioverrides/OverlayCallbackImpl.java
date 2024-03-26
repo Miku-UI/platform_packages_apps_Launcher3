@@ -94,6 +94,32 @@ public class OverlayCallbackImpl
     }
 
     @Override
+    public void onActivityStarted() {
+        mClient.onStart();
+    }
+
+    @Override
+    public void onActivityResumed() {
+        mClient.onResume();
+    }
+
+    @Override
+    public void onActivityPaused() {
+        mClient.onPause();
+    }
+
+    @Override
+    public void onActivityStopped() {
+        mClient.onStop();
+    }
+
+    @Override
+    public void onActivityDestroyed() {
+        mClient.onDestroy();
+        mLauncher.getSharedPrefs().unregisterOnSharedPreferenceChangeListener(this);
+    }
+
+    @Override
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
         if (KEY_ENABLE_MINUS_ONE.equals(key)) {
             mClient.setClientOptions(getClientOptions(prefs));
