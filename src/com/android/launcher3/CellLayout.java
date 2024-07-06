@@ -16,18 +16,12 @@
 
 package com.android.launcher3;
 
-import static android.animation.ValueAnimator.areAnimatorsEnabled;
-
-import static com.android.app.animation.Interpolators.DECELERATE_1_5;
-import static com.android.launcher3.LauncherState.EDIT_MODE;
 import static com.android.launcher3.dragndrop.DraggableView.DRAGGABLE_ICON;
 import static com.android.launcher3.icons.IconNormalizer.ICON_VISIBLE_AREA_FACTOR;
-import static com.android.launcher3.util.MultiTranslateDelegate.INDEX_REORDER_BOUNCE_OFFSET;
 import static com.android.launcher3.util.MultiTranslateDelegate.INDEX_REORDER_PREVIEW_OFFSET;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.animation.ObjectAnimator;
 import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
@@ -48,7 +42,6 @@ import android.util.ArrayMap;
 import android.util.AttributeSet;
 import android.util.FloatProperty;
 import android.util.Log;
-import android.util.Property;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
@@ -70,6 +63,8 @@ import com.android.launcher3.celllayout.CellPosMapper.CellPos;
 import com.android.launcher3.celllayout.DelegatedCellDrawing;
 import com.android.launcher3.celllayout.ItemConfiguration;
 import com.android.launcher3.celllayout.ReorderAlgorithm;
+import com.android.launcher3.celllayout.ReorderParameters;
+import com.android.launcher3.celllayout.ReorderPreviewAnimation;
 import com.android.launcher3.config.FeatureFlags;
 import com.android.launcher3.dragndrop.DraggableView;
 import com.android.launcher3.folder.PreviewBackground;
@@ -188,7 +183,7 @@ public class CellLayout extends ViewGroup {
 
     @ContainerType private final int mContainerType;
 
-    private final float mChildScale = 1f;
+    public static final float DEFAULT_SCALE = 1f;
 
     public static final int MODE_SHOW_REORDER_HINT = 0;
     public static final int MODE_DRAG_OVER = 1;
@@ -198,8 +193,8 @@ public class CellLayout extends ViewGroup {
     private static final boolean DESTRUCTIVE_REORDER = false;
     private static final boolean DEBUG_VISUALIZE_OCCUPIED = false;
 
-    private static final float REORDER_PREVIEW_MAGNITUDE = 0.12f;
-    private static final int REORDER_ANIMATION_DURATION = 150;
+    public static final float REORDER_PREVIEW_MAGNITUDE = 0.12f;
+    public static final int REORDER_ANIMATION_DURATION = 150;
     @Thunk final float mReorderPreviewAnimationMagnitude;
 
     private final ArrayList<View> mIntersectingViews = new ArrayList<>();
@@ -218,6 +213,7 @@ public class CellLayout extends ViewGroup {
     // Related to accessible drag and drop
     DragAndDropAccessibilityDelegate mTouchHelper;
 
+    CellLayoutContainer mCellLayoutContainer;
 
     public static final FloatProperty<CellLayout> SPRING_LOADED_PROGRESS =
             new FloatProperty<CellLayout>("spring_loaded_progress") {
@@ -232,8 +228,9 @@ public class CellLayout extends ViewGroup {
                 }
             };
 
-    public CellLayout(Context context) {
-        this(context, null);
+    public CellLayout(Context context, CellLayoutContainer container) {
+        this(context, (AttributeSet) null);
+        this.mCellLayoutContainer = container;
     }
 
     public CellLayout(Context context, AttributeSet attrs) {
@@ -320,11 +317,18 @@ public class CellLayout extends ViewGroup {
         addView(mShortcutsAndWidgets);
     }
 
+    public CellLayoutContainer getCellLayoutContainer() {
+        return mCellLayoutContainer;
+    }
+
+    public void setCellLayoutContainer(CellLayoutContainer cellLayoutContainer) {
+        mCellLayoutContainer = cellLayoutContainer;
+    }
+
     /**
      * Sets or clears a delegate used for accessible drag and drop
      */
     public void setDragAndDropAccessibilityDelegate(DragAndDropAccessibilityDelegate delegate) {
-        setOnClickListener(delegate);
         ViewCompat.setAccessibilityDelegate(this, delegate);
 
         mTouchHelper = delegate;
@@ -332,7 +336,6 @@ public class CellLayout extends ViewGroup {
                 ? IMPORTANT_FOR_ACCESSIBILITY_YES : IMPORTANT_FOR_ACCESSIBILITY_NO;
         setImportantForAccessibility(accessibilityFlag);
         getShortcutsAndWidgets().setImportantForAccessibility(accessibilityFlag);
-
         // ExploreByTouchHelper sets focusability. Clear it when the delegate is cleared.
         setFocusable(delegate != null);
         // Invalidate the accessibility hierarchy
@@ -577,9 +580,7 @@ public class CellLayout extends ViewGroup {
     }
 
     protected void updateBgAlpha() {
-        if (!getWorkspace().mLauncher.isInState(EDIT_MODE)) {
-            mBackground.setAlpha((int) (mSpringLoadedProgress * 255));
-        }
+        mBackground.setAlpha((int) (mSpringLoadedProgress * 255));
     }
 
     /**
@@ -752,7 +753,7 @@ public class CellLayout extends ViewGroup {
      * @return if adding the view was successful
      */
     public boolean addViewToCellLayout(View child, int index, int childId,
-            CellLayoutLayoutParams params, boolean markCells) {
+                                       CellLayoutLayoutParams params, boolean markCells) {
         final CellLayoutLayoutParams lp = params;
 
         // Hotseat icons - remove text
@@ -761,8 +762,8 @@ public class CellLayout extends ViewGroup {
             bubbleChild.setTextVisibility(mContainerType != HOTSEAT);
         }
 
-        child.setScaleX(mChildScale);
-        child.setScaleY(mChildScale);
+        child.setScaleX(DEFAULT_SCALE);
+        child.setScaleY(DEFAULT_SCALE);
 
         // Generate an id for each view, this assumes we have at most 256x256 cells
         // per workspace screen
@@ -1058,7 +1059,7 @@ public class CellLayout extends ViewGroup {
     }
 
     public boolean animateChildToPosition(final View child, int cellX, int cellY, int duration,
-            int delay, boolean permanent, boolean adjustOccupied) {
+                                          int delay, boolean permanent, boolean adjustOccupied) {
         ShortcutAndWidgetContainer clc = getShortcutsAndWidgets();
 
         if (clc.indexOfChild(child) != -1 && (child instanceof Reorderable)) {
@@ -1154,7 +1155,7 @@ public class CellLayout extends ViewGroup {
     }
 
     void visualizeDropLocation(int cellX, int cellY, int spanX, int spanY,
-            DropTarget.DragObject dragObject) {
+                               DropTarget.DragObject dragObject) {
         if (mDragCell[0] != cellX || mDragCell[1] != cellY || mDragCellSpan[0] != spanX
                 || mDragCellSpan[1] != spanY) {
             mDragCell[0] = cellX;
@@ -1187,11 +1188,11 @@ public class CellLayout extends ViewGroup {
 
     /** Applies the local color extraction to a dragging widget object. */
     private void applyColorExtractionOnWidget(DropTarget.DragObject dragObject, int[] targetCell,
-            int spanX, int spanY) {
+                                              int spanX, int spanY) {
         // Apply local extracted color if the DragView is an AppWidgetHostViewDrawable.
         View view = dragObject.dragView.getContentView();
         if (view instanceof LauncherAppWidgetHostView) {
-            int screenId = getWorkspace().getIdForScreen(this);
+            int screenId = mCellLayoutContainer.getCellLayoutId(this);
             cellToRect(targetCell[0], targetCell[1], spanX, spanY, mTempRect);
 
             ((LauncherAppWidgetHostView) view).handleDrag(mTempRect, this, screenId);
@@ -1204,23 +1205,17 @@ public class CellLayout extends ViewGroup {
             return getContext().getString(R.string.move_to_hotseat_position,
                     Math.max(cellX, cellY) + 1);
         } else {
-            Workspace<?> workspace = getWorkspace();
             int row = cellY + 1;
-            int col = workspace.mIsRtl ? mCountX - cellX : cellX + 1;
-            int panelCount = workspace.getPanelCount();
-            int screenId = workspace.getIdForScreen(this);
-            int pageIndex = workspace.getPageIndexForScreenId(screenId);
+            int col = Utilities.isRtl(getResources()) ? mCountX - cellX : cellX + 1;
+            int panelCount = mCellLayoutContainer.getPanelCount();
+            int pageIndex = mCellLayoutContainer.getCellLayoutIndex(this);
             if (panelCount > 1) {
                 // Increment the column if the target is on the right side of a two panel home
                 col += (pageIndex % panelCount) * mCountX;
             }
             return getContext().getString(R.string.move_to_empty_cell_description, row, col,
-                    workspace.getPageDescription(pageIndex));
+                    mCellLayoutContainer.getPageDescription(pageIndex));
         }
-    }
-
-    private Workspace<?> getWorkspace() {
-        return Launcher.cast(mActivity).getWorkspace();
     }
 
     public void clearDragOutlines() {
@@ -1245,7 +1240,7 @@ public class CellLayout extends ViewGroup {
      *         nearest the requested location.
      */
     public int[] findNearestVacantArea(int pixelX, int pixelY, int minSpanX, int minSpanY,
-            int spanX, int spanY, int[] result, int[] resultSpan) {
+                                       int spanX, int spanY, int[] result, int[] resultSpan) {
         return findNearestArea(pixelX, pixelY, minSpanX, minSpanY, spanX, spanY, false,
                 result, resultSpan);
     }
@@ -1268,7 +1263,7 @@ public class CellLayout extends ViewGroup {
      *         nearest the requested location.
      */
     protected int[] findNearestArea(int relativeXPos, int relativeYPos, int minSpanX, int minSpanY,
-            int spanX, int spanY, boolean ignoreOccupied, int[] result, int[] resultSpan) {
+                                    int spanX, int spanY, boolean ignoreOccupied, int[] result, int[] resultSpan) {
         // For items with a spanX / spanY > 1, the passed in point (relativeXPos, relativeYPos)
         // corresponds to the center of the item, but we are searching based on the top-left cell,
         // so we translate the point over to correspond to the top-left.
@@ -1427,7 +1422,7 @@ public class CellLayout extends ViewGroup {
 
     // This method starts or changes the reorder preview animations
     private void beginOrAdjustReorderPreviewAnimations(ItemConfiguration solution,
-            View dragView, int mode) {
+                                                       View dragView, int mode) {
         int childCount = mShortcutsAndWidgets.getChildCount();
         for (int i = 0; i < childCount; i++) {
             View child = mShortcutsAndWidgets.getChildAt(i);
@@ -1438,171 +1433,11 @@ public class CellLayout extends ViewGroup {
 
             CellLayoutLayoutParams lp = (CellLayoutLayoutParams) child.getLayoutParams();
             if (c != null && !skip && (child instanceof Reorderable)) {
-                ReorderPreviewAnimation rha = new ReorderPreviewAnimation(child,
-                        mode, lp.getCellX(), lp.getCellY(), c.cellX, c.cellY, c.spanX, c.spanY);
+                ReorderPreviewAnimation rha = new ReorderPreviewAnimation(child, mode,
+                        lp.getCellX(), lp.getCellY(), c.cellX, c.cellY, c.spanX, c.spanY,
+                        mReorderPreviewAnimationMagnitude, this, mShakeAnimators);
                 rha.animate();
             }
-        }
-    }
-
-    private static final Property<ReorderPreviewAnimation, Float> ANIMATION_PROGRESS =
-            new Property<ReorderPreviewAnimation, Float>(float.class, "animationProgress") {
-                @Override
-                public Float get(ReorderPreviewAnimation anim) {
-                    return anim.animationProgress;
-                }
-
-                @Override
-                public void set(ReorderPreviewAnimation anim, Float progress) {
-                    anim.setAnimationProgress(progress);
-                }
-            };
-
-    // Class which represents the reorder preview animations. These animations show that an item is
-    // in a temporary state, and hint at where the item will return to.
-    class ReorderPreviewAnimation<T extends View & Reorderable> {
-        final T child;
-        float finalDeltaX;
-        float finalDeltaY;
-        float initDeltaX;
-        float initDeltaY;
-        final float finalScale;
-        float initScale;
-        final int mode;
-        boolean repeating = false;
-        private static final int PREVIEW_DURATION = 300;
-        private static final int HINT_DURATION = Workspace.REORDER_TIMEOUT;
-
-        private static final float CHILD_DIVIDEND = 4.0f;
-
-        public static final int MODE_HINT = 0;
-        public static final int MODE_PREVIEW = 1;
-
-        float animationProgress = 0;
-        ValueAnimator a;
-
-        ReorderPreviewAnimation(View childView, int mode, int cellX0, int cellY0,
-                int cellX1, int cellY1, int spanX, int spanY) {
-            regionToCenterPoint(cellX0, cellY0, spanX, spanY, mTmpPoint);
-            final int x0 = mTmpPoint[0];
-            final int y0 = mTmpPoint[1];
-            regionToCenterPoint(cellX1, cellY1, spanX, spanY, mTmpPoint);
-            final int x1 = mTmpPoint[0];
-            final int y1 = mTmpPoint[1];
-            final int dX = x1 - x0;
-            final int dY = y1 - y0;
-
-            this.child = (T) childView;
-            this.mode = mode;
-            finalDeltaX = 0;
-            finalDeltaY = 0;
-
-            MultiTranslateDelegate mtd = child.getTranslateDelegate();
-            initDeltaX = mtd.getTranslationX(INDEX_REORDER_BOUNCE_OFFSET).getValue();
-            initDeltaY = mtd.getTranslationY(INDEX_REORDER_BOUNCE_OFFSET).getValue();
-            initScale = child.getReorderBounceScale();
-            finalScale = mChildScale - (CHILD_DIVIDEND / child.getWidth()) * initScale;
-
-            int dir = mode == MODE_HINT ? -1 : 1;
-            if (dX == dY && dX == 0) {
-            } else {
-                if (dY == 0) {
-                    finalDeltaX = -dir * Math.signum(dX) * mReorderPreviewAnimationMagnitude;
-                } else if (dX == 0) {
-                    finalDeltaY = -dir * Math.signum(dY) * mReorderPreviewAnimationMagnitude;
-                } else {
-                    double angle = Math.atan( (float) (dY) / dX);
-                    finalDeltaX = (int) (-dir * Math.signum(dX)
-                            * Math.abs(Math.cos(angle) * mReorderPreviewAnimationMagnitude));
-                    finalDeltaY = (int) (-dir * Math.signum(dY)
-                            * Math.abs(Math.sin(angle) * mReorderPreviewAnimationMagnitude));
-                }
-            }
-        }
-
-        void setInitialAnimationValuesToBaseline() {
-            initScale = mChildScale;
-            initDeltaX = 0;
-            initDeltaY = 0;
-        }
-
-        void animate() {
-            boolean noMovement = (finalDeltaX == 0) && (finalDeltaY == 0);
-
-            if (mShakeAnimators.containsKey(child)) {
-                ReorderPreviewAnimation oldAnimation = mShakeAnimators.get(child);
-                mShakeAnimators.remove(child);
-
-                if (noMovement) {
-                    // A previous animation for this item exists, and no new animation will exist.
-                    // Finish the old animation smoothly.
-                    oldAnimation.finishAnimation();
-                    return;
-                } else {
-                    // A previous animation for this item exists, and a new one will exist. Stop
-                    // the old animation in its tracks, and proceed with the new one.
-                    oldAnimation.cancel();
-                }
-            }
-            if (noMovement) {
-                return;
-            }
-
-            ValueAnimator va = ObjectAnimator.ofFloat(this, ANIMATION_PROGRESS, 0, 1);
-            a = va;
-
-            // Animations are disabled in power save mode, causing the repeated animation to jump
-            // spastically between beginning and end states. Since this looks bad, we don't repeat
-            // the animation in power save mode.
-            if (areAnimatorsEnabled()) {
-                va.setRepeatMode(ValueAnimator.REVERSE);
-                va.setRepeatCount(ValueAnimator.INFINITE);
-            }
-
-            va.setDuration(mode == MODE_HINT ? HINT_DURATION : PREVIEW_DURATION);
-            va.setStartDelay((int) (Math.random() * 60));
-            va.addListener(new AnimatorListenerAdapter() {
-                public void onAnimationRepeat(Animator animation) {
-                    // We make sure to end only after a full period
-                    setInitialAnimationValuesToBaseline();
-                    repeating = true;
-                }
-            });
-            mShakeAnimators.put(child, this);
-            va.start();
-        }
-
-        private void setAnimationProgress(float progress) {
-            animationProgress = progress;
-            float r1 = (mode == MODE_HINT && repeating) ? 1.0f : animationProgress;
-            float x = r1 * finalDeltaX + (1 - r1) * initDeltaX;
-            float y = r1 * finalDeltaY + (1 - r1) * initDeltaY;
-            child.getTranslateDelegate().setTranslation(INDEX_REORDER_BOUNCE_OFFSET, x, y);
-            float s = animationProgress * finalScale + (1 - animationProgress) * initScale;
-            child.setReorderBounceScale(s);
-        }
-
-        private void cancel() {
-            if (a != null) {
-                a.cancel();
-            }
-        }
-
-        /**
-         * Smoothly returns the item to its baseline position / scale
-         */
-        @Thunk void finishAnimation() {
-            if (a != null) {
-                a.cancel();
-            }
-
-            setInitialAnimationValuesToBaseline();
-            ValueAnimator va = ObjectAnimator.ofFloat(this, ANIMATION_PROGRESS,
-                    animationProgress, 0);
-            a = va;
-            a.setInterpolator(DECELERATE_1_5);
-            a.setDuration(REORDER_ANIMATION_DURATION);
-            a.start();
         }
     }
 
@@ -1616,7 +1451,7 @@ public class CellLayout extends ViewGroup {
     private void commitTempPlacement(View dragView) {
         mTmpOccupied.copyTo(mOccupied);
 
-        int screenId = getWorkspace().getIdForScreen(this);
+        int screenId = mCellLayoutContainer.getCellLayoutId(this);
         int container = Favorites.CONTAINER_DESKTOP;
 
         if (mContainerType == HOTSEAT) {
@@ -1683,7 +1518,7 @@ public class CellLayout extends ViewGroup {
     }
 
     public boolean isNearestDropLocationOccupied(int pixelX, int pixelY, int spanX, int spanY,
-            View dragView, int[] result) {
+                                                 View dragView, int[] result) {
         result = findNearestAreaIgnoreOccupied(pixelX, pixelY, spanX, spanY, result);
         return getIntersectingRectanglesInRegion(
                 new Rect(result[0], result[1], result[0] + spanX, result[1] + spanY),
@@ -1711,13 +1546,13 @@ public class CellLayout extends ViewGroup {
     }
 
     boolean createAreaForResize(int cellX, int cellY, int spanX, int spanY,
-            View dragView, int[] direction, boolean commit) {
+                                View dragView, int[] direction, boolean commit) {
         int[] pixelXY = new int[2];
         regionToCenterPoint(cellX, cellY, spanX, spanY, pixelXY);
 
         // First we determine if things have moved enough to cause a different layout
         ItemConfiguration swapSolution = findReorderSolution(pixelXY[0], pixelXY[1], spanX, spanY,
-                spanX,  spanY, direction, dragView,  true,  new ItemConfiguration());
+                spanX,  spanY, direction, dragView,  true);
 
         setUseTempCoords(true);
         if (swapSolution != null && swapSolution.isSolution) {
@@ -1746,10 +1581,13 @@ public class CellLayout extends ViewGroup {
     }
 
     protected ItemConfiguration findReorderSolution(int pixelX, int pixelY, int minSpanX,
-            int minSpanY, int spanX, int spanY, int[] direction, View dragView, boolean decX,
-            ItemConfiguration solution) {
-        return createReorderAlgorithm().findReorderSolution(pixelX, pixelY, minSpanX, minSpanY,
-                spanX, spanY, direction, dragView, decX, solution);
+                                                    int minSpanY, int spanX, int spanY, int[] direction, View dragView, boolean decX) {
+        ItemConfiguration configuration = new ItemConfiguration();
+        copyCurrentStateToSolution(configuration);
+        ReorderParameters parameters = new ReorderParameters(pixelX, pixelY, spanX, spanY, minSpanX,
+                minSpanY, dragView, configuration);
+        int[] directionVector = direction != null ? direction : mDirectionVector;
+        return createReorderAlgorithm().findReorderSolution(parameters, directionVector, decX);
     }
 
     public void copyCurrentStateToSolution(ItemConfiguration solution) {
@@ -1778,13 +1616,17 @@ public class CellLayout extends ViewGroup {
      *         the locations they should be in the given solution.
      */
     public ItemConfiguration calculateReorder(int pixelX, int pixelY, int minSpanX, int minSpanY,
-            int spanX, int spanY, View dragView) {
-        return createReorderAlgorithm().calculateReorder(pixelX, pixelY, minSpanX, minSpanY,
-                spanX, spanY, dragView);
+                                              int spanX, int spanY, View dragView) {
+        ItemConfiguration configuration = new ItemConfiguration();
+        copyCurrentStateToSolution(configuration);
+        return createReorderAlgorithm().calculateReorder(
+                new ReorderParameters(pixelX, pixelY, spanX, spanY,  minSpanX, minSpanY, dragView,
+                        configuration)
+        );
     }
 
     int[] performReorder(int pixelX, int pixelY, int minSpanX, int minSpanY, int spanX, int spanY,
-            View dragView, int[] result, int[] resultSpan, int mode) {
+                         View dragView, int[] result, int[] resultSpan, int mode) {
         if (resultSpan == null) {
             resultSpan = new int[]{-1, -1};
         }
@@ -1891,7 +1733,7 @@ public class CellLayout extends ViewGroup {
      *         nearest the requested location.
      */
     public int[] findNearestAreaIgnoreOccupied(int pixelX, int pixelY, int spanX, int spanY,
-            int[] result) {
+                                               int[] result) {
         return findNearestArea(pixelX, pixelY, spanX, spanY, spanX, spanY, true, result, null);
     }
 
@@ -2069,7 +1911,7 @@ public class CellLayout extends ViewGroup {
                 cellToPoint(cellX, cellY, cellPoint);
                 if (findReorderSolution(cellPoint[0], cellPoint[1], itemInfo.minSpanX,
                         itemInfo.minSpanY, itemInfo.spanX, itemInfo.spanY, mDirectionVector, null,
-                        true, new ItemConfiguration()).isSolution) {
+                        true).isSolution) {
                     return true;
                 }
             }
@@ -2084,9 +1926,18 @@ public class CellLayout extends ViewGroup {
         int[] cellPoint = new int[2];
         int[] directionVector = new int[]{0, -1};
         cellToPoint(0, mCountY, cellPoint);
-        ItemConfiguration configuration = new ItemConfiguration();
-        if (findReorderSolution(cellPoint[0], cellPoint[1], mCountX, 1, mCountX, 1,
-                directionVector, null, false, configuration).isSolution) {
+        ItemConfiguration configuration = findReorderSolution(
+                cellPoint[0] /* pixelX */,
+                cellPoint[1] /* pixelY */,
+                mCountX /* minSpanX */,
+                1 /* minSpanY */,
+                mCountX /* spanX */,
+                1 /* spanY */,
+                directionVector /* direction */,
+                null /* dragView */,
+                false /* decX */
+        );
+        if (configuration.isSolution) {
             if (commitConfig) {
                 copySolutionToTempState(configuration, null);
                 commitTempPlacement(null);
