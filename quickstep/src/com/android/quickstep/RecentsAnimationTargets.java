@@ -17,12 +17,15 @@ package com.android.quickstep;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.view.RemoteAnimationTarget.MODE_CLOSING;
-import static com.android.quickstep.views.DesktopTaskView.isDesktopModeSupported;
+
+import static com.android.window.flags.Flags.enableDesktopWindowingMode;
 
 import android.app.WindowConfiguration;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.view.RemoteAnimationTarget;
+
+import java.io.PrintWriter;
 
 /**
  * Extension of {@link RemoteAnimationTargets} with additional information about swipe
@@ -52,7 +55,7 @@ public class RecentsAnimationTargets extends RemoteAnimationTargets {
      * @return {@code true} if at least one target app is a desktop task
      */
     public boolean hasDesktopTasks() {
-        if (!isDesktopModeSupported()) {
+        if (!enableDesktopWindowingMode()) {
             return false;
         }
         for (RemoteAnimationTarget target : apps) {
@@ -61,5 +64,15 @@ public class RecentsAnimationTargets extends RemoteAnimationTargets {
             }
         }
         return false;
+    }
+
+    @Override
+    public void dump(String prefix, PrintWriter pw) {
+        super.dump(prefix, pw);
+        prefix += '\t';
+        pw.println(prefix + "RecentsAnimationTargets:");
+
+        pw.println(prefix + "\thomeContentInsets=" + homeContentInsets);
+        pw.println(prefix + "\tminimizedHomeBounds=" + minimizedHomeBounds);
     }
 }

@@ -17,6 +17,7 @@ package com.android.launcher3.widget;
 
 import static android.app.Activity.RESULT_CANCELED;
 
+import static com.android.launcher3.BuildConfig.WIDGETS_ENABLED;
 import static com.android.launcher3.Flags.enableWorkspaceInflation;
 import static com.android.launcher3.util.Executors.MAIN_EXECUTOR;
 import static com.android.launcher3.widget.LauncherAppWidgetProviderInfo.fromProviderInfo;
@@ -40,7 +41,6 @@ import com.android.launcher3.BaseActivity;
 import com.android.launcher3.BaseDraggingActivity;
 import com.android.launcher3.R;
 import com.android.launcher3.Utilities;
-import com.android.launcher3.model.WidgetsModel;
 import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.testing.TestLogging;
 import com.android.launcher3.testing.shared.TestProtocol;
@@ -100,10 +100,10 @@ public class LauncherWidgetHolder {
      * Starts listening to the widget updates from the server side
      */
     public void startListening() {
-        if (WidgetsModel.GO_DISABLE_WIDGETS) {
+        if (!WIDGETS_ENABLED) {
             return;
         }
-        setListeningFlag(true);
+
         try {
             mWidgetHost.startListening();
         } catch (Exception e) {
@@ -115,6 +115,8 @@ public class LauncherWidgetHolder {
             // have been established by this point, and we will end up populating the
             // widgets upon bind anyway. See issue 14255011 for more context.
         }
+        // TODO: Investigate why widgetHost.startListening() always return non-empty updates
+        setListeningFlag(true);
 
         updateDeferredView();
     }
@@ -175,7 +177,7 @@ public class LauncherWidgetHolder {
      * @return The allocated app widget id if allocation is successful, returns -1 otherwise
      */
     public int allocateAppWidgetId() {
-        if (WidgetsModel.GO_DISABLE_WIDGETS) {
+        if (!WIDGETS_ENABLED) {
             return AppWidgetManager.INVALID_APPWIDGET_ID;
         }
 
@@ -208,7 +210,7 @@ public class LauncherWidgetHolder {
      */
     public void startConfigActivity(@NonNull BaseDraggingActivity activity, int widgetId,
             int requestCode) {
-        if (WidgetsModel.GO_DISABLE_WIDGETS) {
+        if (!WIDGETS_ENABLED) {
             sendActionCancelled(activity, requestCode);
             return;
         }
@@ -259,7 +261,7 @@ public class LauncherWidgetHolder {
      */
     public void startBindFlow(@NonNull BaseActivity activity,
             int appWidgetId, @NonNull AppWidgetProviderInfo info, int requestCode) {
-        if (WidgetsModel.GO_DISABLE_WIDGETS) {
+        if (!WIDGETS_ENABLED) {
             sendActionCancelled(activity, requestCode);
             return;
         }
@@ -277,7 +279,7 @@ public class LauncherWidgetHolder {
      * Stop the host from listening to the widget updates
      */
     public void stopListening() {
-        if (WidgetsModel.GO_DISABLE_WIDGETS) {
+        if (!WIDGETS_ENABLED) {
             return;
         }
         mWidgetHost.stopListening();
@@ -347,7 +349,13 @@ public class LauncherWidgetHolder {
     @NonNull
     public final AppWidgetHostView attachViewToHostAndGetAttachedView(
             @NonNull LauncherAppWidgetHostView view) {
-        if (mViews.get(view.getAppWidgetId()) != view) {
+
+        // Binder can also inflate placeholder widgets in case of backup-restore. Skip
+        // attaching such widgets
+        boolean isRealWidget = ((view instanceof PendingAppWidgetHostView pw)
+                ? pw.isDeferredWidget() : true)
+                && view.getAppWidgetInfo() != null;
+        if (isRealWidget && mViews.get(view.getAppWidgetId()) != view) {
             view = recycleExistingView(view);
             mViews.put(view.getAppWidgetId(), view);
         }
@@ -439,6 +447,13 @@ public class LauncherWidgetHolder {
         LauncherAppWidgetHost tempHost = (LauncherAppWidgetHost) mWidgetHost;
         tempHost.clearViews();
         mViews.clear();
+    }
+
+    /**
+     * Clears all the internal widget views
+     */
+    public void clearWidgetViews() {
+        clearViews();
     }
 
     /**

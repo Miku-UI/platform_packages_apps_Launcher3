@@ -21,6 +21,7 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="recent_task_option_pin" msgid="7929860679018978258">"Кадап коюу"</string>
     <string name="recent_task_option_freeform" msgid="48863056265284071">"Эркин форма режими"</string>
+    <string name="recent_task_option_desktop" msgid="8280879717125435668">"Компьютер"</string>
     <string name="recents_empty_message" msgid="7040467240571714191">"Акыркы колдонмолор жок"</string>
     <string name="accessibility_app_usage_settings" msgid="6312864233673544149">"Колдонмону пайдалануу параметрлери"</string>
     <string name="recents_clear_all" msgid="5328176793634888831">"Баарын тазалоо"</string>
@@ -95,6 +96,7 @@
     <string name="action_share" msgid="2648470652637092375">"Бөлүшүү"</string>
     <string name="action_screenshot" msgid="8171125848358142917">"Скриншот"</string>
     <string name="action_split" msgid="2098009717623550676">"Бөлүү"</string>
+    <string name="action_save_app_pair" msgid="5974823919237645229">"Колдонмолорду сактап коюу"</string>
     <string name="toast_split_select_app" msgid="8464310533320556058">"Экранды бөлүү үчүн башка колдонмону таптап коюңуз"</string>
     <string name="toast_contextual_split_select_app" msgid="433510957123687090">"Экранды бөлүү үчүн башка колдонмону тандаңыз"</string>
     <string name="toast_split_select_app_cancel" msgid="1532690483356445639"><b>"Жокко чыгаруу"</b></string>
@@ -115,6 +117,8 @@
     <string name="taskbar_edu_features" msgid="3320337287472848162">"Тапшырмалар тактасы менен көбүрөөк иш бүтүрөсүз"</string>
     <string name="taskbar_edu_pinning_title" msgid="210102174154211712">"Тапшырмалар панелин ар дайым көрсөтүү"</string>
     <string name="taskbar_edu_pinning_standalone" msgid="2636919474366410467">"Тапшырмалар панелин экрандын ылдый жагында ар дайым көрсөтүү үчүн бөлгүчтү коё бербей басыңыз"</string>
+    <string name="taskbar_search_edu_title" msgid="5569194922234364530">"Экрандагы нерсени издөө үчүн аракет баскычын коё бербей кармап туруңуз"</string>
+    <string name="taskbar_edu_search_disclosure" msgid="8734536088447779686">"Бул кызмат издөө үчүн экранда тандалган бөлүктү колдонот. Google\'дун <xliff:g id="BEGIN_PRIVACY_LINK">&lt;a href="%1$s"&gt;</xliff:g>Купуялык эрежелери<xliff:g id="END_PRIVACY_LINK">&lt;/a&gt;</xliff:g> жана <xliff:g id="BEGIN_TOS_LINK">&lt;a href="%2$s"&gt;</xliff:g>Тейлөө шарттары<xliff:g id="END_TOS_LINK">&lt;/a&gt;</xliff:g> колдонулат."</string>
     <string name="taskbar_edu_close" msgid="887022990168191073">"Жабуу"</string>
     <string name="taskbar_edu_done" msgid="6880178093977704569">"Бүттү"</string>
     <string name="taskbar_button_home" msgid="2151398979630664652">"Башкы бет"</string>
@@ -134,7 +138,10 @@
     <string name="move_drop_target_top_or_left" msgid="2988702185049595807">"Жогорку/сол бурчка жылдыруу"</string>
     <string name="move_drop_target_bottom_or_right" msgid="5431393418797620162">"Төмөнкү/оң бурчка жылдыруу"</string>
     <string name="quick_switch_overflow" msgid="6935266023013283353">"{count,plural, =1{Дагы # колдонмону көрсөтүү.}other{Дагы # колдонмону көрсөтүү.}}"</string>
+    <string name="quick_switch_desktop" msgid="4834587349322698616">"{count,plural, =1{# иш такта колдонмосун көрсөтүү.}other{# иш такта колдонмосун көрсөтүү.}}"</string>
     <string name="quick_switch_split_task" msgid="5598194724255333896">"<xliff:g id="APP_NAME_1">%1$s</xliff:g> жана <xliff:g id="APP_NAME_2">%2$s</xliff:g>"</string>
-    <string name="desktop_select_app_toast" msgid="2306057322833956910">"Колдонмону иш тактага кошуу"</string>
-    <string name="desktop_button_close_app_toast" msgid="5283096349579408560">"Жокко чыгаруу"</string>
+    <string name="bubble_bar_bubble_fallback_description" msgid="7811684548953452009">"Көбүкчө"</string>
+    <string name="bubble_bar_overflow_description" msgid="8617628132733151708">"Кошумча меню"</string>
+    <string name="bubble_bar_bubble_description" msgid="1882466152448446446">"<xliff:g id="APP_NAME">%2$s</xliff:g> колдонмосунан <xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g>"</string>
+    <string name="bubble_bar_description_multiple_bubbles" msgid="3922207715357143648">"<xliff:g id="BUBBLE_BAR_BUBBLE_DESCRIPTION">%1$s</xliff:g> жана дагы <xliff:g id="BUBBLE_COUNT">%2$d</xliff:g>"</string>
 </resources>

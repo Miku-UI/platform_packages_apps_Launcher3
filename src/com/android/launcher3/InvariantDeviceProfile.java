@@ -20,6 +20,7 @@ import static com.android.launcher3.LauncherPrefs.GRID_NAME;
 import static com.android.launcher3.Utilities.dpiFromPx;
 import static com.android.launcher3.testing.shared.ResourceUtils.INVALID_RESOURCE_HANDLE;
 import static com.android.launcher3.util.DisplayController.CHANGE_DENSITY;
+import static com.android.launcher3.util.DisplayController.CHANGE_DESKTOP_MODE;
 import static com.android.launcher3.util.DisplayController.CHANGE_NAVIGATION_MODE;
 import static com.android.launcher3.util.DisplayController.CHANGE_SUPPORTED_BOUNDS;
 import static com.android.launcher3.util.DisplayController.CHANGE_TASKBAR_PINNING;
@@ -60,6 +61,7 @@ import com.android.launcher3.util.DisplayController.Info;
 import com.android.launcher3.util.LockedUserState;
 import com.android.launcher3.util.MainThreadInitializedObject;
 import com.android.launcher3.util.Partner;
+import com.android.launcher3.util.SafeCloseable;
 import com.android.launcher3.util.WindowBounds;
 import com.android.launcher3.util.window.WindowManagerProxy;
 
@@ -74,9 +76,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
-public class InvariantDeviceProfile implements SharedPreferences.OnSharedPreferenceChangeListener {
+public class InvariantDeviceProfile implements SafeCloseable, SharedPreferences.OnSharedPreferenceChangeListener {
 
     public static final String TAG = "IDP";
     // We do not need any synchronization for this variable as its only written on UI thread.
@@ -164,7 +167,6 @@ public class InvariantDeviceProfile implements SharedPreferences.OnSharedPrefere
      */
     public int numDatabaseHotseatIcons;
 
-    public int[] hotseatColumnSpan;
     public float[] hotseatBarBottomSpace;
     public float[] hotseatQsbSpace;
 
@@ -232,14 +234,14 @@ public class InvariantDeviceProfile implements SharedPreferences.OnSharedPrefere
         if (!newGridName.equals(gridName)) {
             LauncherPrefs.get(context).put(GRID_NAME, newGridName);
         }
-        LockedUserState.get(context).runOnUserUnlocked(() -> {
-            new DeviceGridState(this).writeToPrefs(context);
-        });
+        LockedUserState.get(context).runOnUserUnlocked(() ->
+            new DeviceGridState(this).writeToPrefs(context));
 
         DisplayController.INSTANCE.get(context).setPriorityListener(
                 (displayContext, info, flags) -> {
                     if ((flags & (CHANGE_DENSITY | CHANGE_SUPPORTED_BOUNDS
-                            | CHANGE_NAVIGATION_MODE | CHANGE_TASKBAR_PINNING)) != 0) {
+                            | CHANGE_NAVIGATION_MODE | CHANGE_TASKBAR_PINNING
+                            | CHANGE_DESKTOP_MODE)) != 0) {
                         onConfigChanged(displayContext);
                     }
                 });
@@ -280,7 +282,7 @@ public class InvariantDeviceProfile implements SharedPreferences.OnSharedPrefere
 
         // Get the display info based on default display and interpolate it to existing display
         Info defaultInfo = DisplayController.INSTANCE.get(context).getInfo();
-        @DeviceType int defaultDeviceType = getDeviceType(defaultInfo);
+        @DeviceType int defaultDeviceType = defaultInfo.getDeviceType();
         DisplayOption defaultDisplayOption = invDistWeightedInterpolate(
                 defaultInfo,
                 getPredefinedDeviceProfiles(context, gridName, defaultDeviceType,
@@ -289,7 +291,7 @@ public class InvariantDeviceProfile implements SharedPreferences.OnSharedPrefere
 
         Context displayContext = context.createDisplayContext(display);
         Info myInfo = new Info(displayContext);
-        @DeviceType int deviceType = getDeviceType(myInfo);
+        @DeviceType int deviceType = myInfo.getDeviceType();
         DisplayOption myDisplayOption = invDistWeightedInterpolate(
                 myInfo,
                 getPredefinedDeviceProfiles(context, gridName, deviceType,
@@ -311,6 +313,11 @@ public class InvariantDeviceProfile implements SharedPreferences.OnSharedPrefere
                 COUNT_SIZES);
 
         initGrid(context, myInfo, result, deviceType);
+    }
+
+    @Override
+    public void close() {
+        DisplayController.INSTANCE.executeIfCreated(dc -> dc.setPriorityListener(null));
     }
 
     /**
@@ -342,30 +349,13 @@ public class InvariantDeviceProfile implements SharedPreferences.OnSharedPrefere
         }
     }
 
-    private static @DeviceType int getDeviceType(Info displayInfo) {
-        int flagPhone = 1 << 0;
-        int flagTablet = 1 << 1;
-
-        int type = displayInfo.supportedBounds.stream()
-                .mapToInt(bounds -> displayInfo.isTablet(bounds) ? flagTablet : flagPhone)
-                .reduce(0, (a, b) -> a | b);
-        if (type == (flagPhone | flagTablet)) {
-            // device has profiles supporting both phone and table modes
-            return TYPE_MULTI_DISPLAY;
-        } else if (type == flagTablet) {
-            return TYPE_TABLET;
-        } else {
-            return TYPE_PHONE;
-        }
-    }
-
     public static String getCurrentGridName(Context context) {
         return LauncherPrefs.get(context).get(GRID_NAME);
     }
 
     private String initGrid(Context context, String gridName) {
         Info displayInfo = DisplayController.INSTANCE.get(context).getInfo();
-        @DeviceType int deviceType = getDeviceType(displayInfo);
+        @DeviceType int deviceType = displayInfo.getDeviceType();
 
         ArrayList<DisplayOption> allOptions =
                 getPredefinedDeviceProfiles(context, gridName, deviceType,
@@ -374,6 +364,15 @@ public class InvariantDeviceProfile implements SharedPreferences.OnSharedPrefere
                 invDistWeightedInterpolate(displayInfo, allOptions, deviceType);
         initGrid(context, displayInfo, displayOption, deviceType);
         return displayOption.grid.name;
+    }
+
+    /**
+     * @deprecated This is a temporary solution because on the backup and restore case we modify the
+     * IDP, this resets it. b/332974074
+     */
+    @Deprecated
+    public void reset(Context context) {
+        initGrid(context, getCurrentGridName(context));
     }
 
     @VisibleForTesting
@@ -437,7 +436,6 @@ public class InvariantDeviceProfile implements SharedPreferences.OnSharedPrefere
         numShownHotseatIcons = closestProfile.numHotseatIcons;
         numDatabaseHotseatIcons = deviceType == TYPE_MULTI_DISPLAY
                 ? closestProfile.numDatabaseHotseatIcons : closestProfile.numHotseatIcons;
-        hotseatColumnSpan = closestProfile.hotseatColumnSpan;
         hotseatBarBottomSpace = displayOption.hotseatBarBottomSpace;
         hotseatQsbSpace = displayOption.hotseatQsbSpace;
 
@@ -597,6 +595,45 @@ public class InvariantDeviceProfile implements SharedPreferences.OnSharedPrefere
             throw new RuntimeException("No display option with canBeDefault=true");
         }
         return filteredProfiles;
+    }
+
+    /**
+     * Returns the GridOption associated to the given file name or null if the fileName is not
+     * supported.
+     * Ej, launcher.db -> "normal grid", launcher_4_by_4.db -> "practical grid"
+     */
+    public GridOption getGridOptionFromFileName(Context context, String fileName) {
+        return parseAllGridOptions(context).stream()
+                .filter(gridOption -> Objects.equals(gridOption.dbFile, fileName))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Returns the name of the given size on the current device or empty string if the size is not
+     * supported. Ej. 4x4 -> normal, 5x4 -> practical, etc.
+     * (Note: the name of the grid can be different for the same grid size depending of
+     * the values of the InvariantDeviceProfile)
+     *
+     */
+    public String getGridNameFromSize(Context context, Point size) {
+        return parseAllGridOptions(context).stream()
+                .filter(gridOption -> gridOption.numColumns == size.x
+                        && gridOption.numRows == size.y)
+                .map(gridOption -> gridOption.name)
+                .findFirst()
+                .orElse("");
+    }
+
+    /**
+     * Returns the grid option for the given gridName on the current device (Note: the gridOption
+     * be different for the same gridName depending on the values of the InvariantDeviceProfile).
+     */
+    public GridOption getGridOptionFromName(Context context, String gridName) {
+        return parseAllGridOptions(context).stream()
+                .filter(gridOption -> Objects.equals(gridOption.name, gridName))
+                .findFirst()
+                .orElse(null);
     }
 
     /**
@@ -852,8 +889,6 @@ public class InvariantDeviceProfile implements SharedPreferences.OnSharedPrefere
         private final int numHotseatIcons;
         private final int numDatabaseHotseatIcons;
 
-        private final int[] hotseatColumnSpan = new int[COUNT_SIZES];
-
         private final boolean[] inlineQsb = new boolean[COUNT_SIZES];
 
         private @DimenRes int inlineNavButtonsEndSpacing;
@@ -903,17 +938,6 @@ public class InvariantDeviceProfile implements SharedPreferences.OnSharedPrefere
                     R.styleable.GridDisplayOption_numHotseatIcons, numColumns);
             numDatabaseHotseatIcons = a.getInt(
                     R.styleable.GridDisplayOption_numExtendedHotseatIcons, 2 * numHotseatIcons);
-
-            hotseatColumnSpan[INDEX_DEFAULT] = a.getInt(
-                    R.styleable.GridDisplayOption_hotseatColumnSpan, numColumns);
-            hotseatColumnSpan[INDEX_LANDSCAPE] = a.getInt(
-                    R.styleable.GridDisplayOption_hotseatColumnSpanLandscape, numColumns);
-            hotseatColumnSpan[INDEX_TWO_PANEL_LANDSCAPE] = a.getInt(
-                    R.styleable.GridDisplayOption_hotseatColumnSpanTwoPanelLandscape,
-                    numColumns);
-            hotseatColumnSpan[INDEX_TWO_PANEL_PORTRAIT] = a.getInt(
-                    R.styleable.GridDisplayOption_hotseatColumnSpanTwoPanelPortrait,
-                    numColumns);
 
             inlineNavButtonsEndSpacing =
                     a.getResourceId(R.styleable.GridDisplayOption_inlineNavButtonsEndSpacing,

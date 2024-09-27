@@ -18,14 +18,20 @@ package com.android.launcher3.allapps;
 import static com.android.launcher3.allapps.SectionDecorationInfo.ROUND_BOTTOM_LEFT;
 import static com.android.launcher3.allapps.SectionDecorationInfo.ROUND_BOTTOM_RIGHT;
 import static com.android.launcher3.allapps.SectionDecorationInfo.ROUND_NOTHING;
+import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_PRIVATE_SPACE_PREINSTALLED_APPS_COUNT;
+import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_PRIVATE_SPACE_USER_INSTALLED_APPS_COUNT;
 
 import android.content.Context;
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.style.ImageSpan;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.DiffUtil;
 
 import com.android.launcher3.Flags;
+import com.android.launcher3.R;
 import com.android.launcher3.allapps.BaseAllAppsAdapter.AdapterItem;
 import com.android.launcher3.model.data.AppInfo;
 import com.android.launcher3.model.data.ItemInfo;
@@ -62,11 +68,11 @@ public class AlphabeticalAppsList<T extends Context & ActivityContext> implement
      */
     public static class FastScrollSectionInfo {
         // The section name
-        public final String sectionName;
+        public final CharSequence sectionName;
         // The item position
         public final int position;
 
-        public FastScrollSectionInfo(String sectionName, int position) {
+        public FastScrollSectionInfo(CharSequence sectionName, int position) {
             this.sectionName = sectionName;
             this.position = position;
         }
@@ -90,6 +96,7 @@ public class AlphabeticalAppsList<T extends Context & ActivityContext> implement
 
     // The of ordered component names as a result of a search query
     private final ArrayList<AdapterItem> mSearchResults = new ArrayList<>();
+    private final SpannableString mPrivateProfileAppScrollerBadge;
     private BaseAllAppsAdapter<T> mAdapter;
     private AppInfoComparator mAppNameComparator;
     private int mNumAppsPerRowAllApps;
@@ -107,6 +114,10 @@ public class AlphabeticalAppsList<T extends Context & ActivityContext> implement
         if (mAllAppsStore != null) {
             mAllAppsStore.addUpdateListener(this);
         }
+        mPrivateProfileAppScrollerBadge = new SpannableString(" ");
+        mPrivateProfileAppScrollerBadge.setSpan(new ImageSpan(context,
+                        R.drawable.ic_private_profile_app_scroller_badge, ImageSpan.ALIGN_CENTER),
+                0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
     }
 
     /** Set the number of apps per row when device profile changes. */
@@ -203,7 +214,10 @@ public class AlphabeticalAppsList<T extends Context & ActivityContext> implement
      */
     @Override
     public void onAppsUpdated() {
-        if (mAllAppsStore == null) {
+        // Don't update apps when the private profile animations are running, otherwise the motion
+        // is canceled.
+        if (mAllAppsStore == null || (mPrivateProviderManager != null &&
+                mPrivateProviderManager.getAnimationRunning())) {
             return;
         }
         // Sort the list of apps
@@ -270,6 +284,12 @@ public class AlphabeticalAppsList<T extends Context & ActivityContext> implement
                 addApps = mWorkProviderManager.shouldShowWorkApps();
             }
             if (addApps) {
+                if (/* education card was added */ position == 1) {
+                    // Add work educard section with "info icon" at 0th position.
+                    mFastScrollerSections.add(new FastScrollSectionInfo(
+                            mActivityContext.getResources().getString(
+                                    R.string.work_profile_edu_section), 0));
+                }
                 position = addAppsWithSections(mApps, position);
             }
             if (Flags.enablePrivateSpace()) {
@@ -317,6 +337,8 @@ public class AlphabeticalAppsList<T extends Context & ActivityContext> implement
                 && !mPrivateApps.isEmpty()) {
             // Always add PS Header if Space is present and visible.
             position = mPrivateProviderManager.addPrivateSpaceHeader(mAdapterItems);
+            mFastScrollerSections.add(new FastScrollSectionInfo(
+                    mPrivateProfileAppScrollerBadge, position));
             int privateSpaceState = mPrivateProviderManager.getCurrentState();
             switch (privateSpaceState) {
                 case PrivateProfileManager.STATE_DISABLED:
@@ -341,7 +363,21 @@ public class AlphabeticalAppsList<T extends Context & ActivityContext> implement
         // Split of private space apps into user-installed and system apps.
         Map<Boolean, List<AppInfo>> split = mPrivateApps.stream()
                 .collect(Collectors.partitioningBy(mPrivateProviderManager
-                                .splitIntoUserInstalledAndSystemApps()));
+                                .splitIntoUserInstalledAndSystemApps(mActivityContext)));
+
+        // TODO(b/329688630): switch to the pulled LayoutStaticSnapshot atom
+        mActivityContext
+                .getStatsLogManager()
+                .logger()
+                .withCardinality(split.get(true).size())
+                .log(LAUNCHER_PRIVATE_SPACE_USER_INSTALLED_APPS_COUNT);
+
+        mActivityContext
+                .getStatsLogManager()
+                .logger()
+                .withCardinality(split.get(false).size())
+                .log(LAUNCHER_PRIVATE_SPACE_PREINSTALLED_APPS_COUNT);
+
         // Add user installed apps
         position = addAppsWithSections(split.get(true), position);
         // Add system apps separator.
@@ -357,6 +393,7 @@ public class AlphabeticalAppsList<T extends Context & ActivityContext> implement
     private int addAppsWithSections(List<AppInfo> appList, int startPosition) {
         String lastSectionName = null;
         boolean hasPrivateApps = false;
+        int position = startPosition;
         if (mPrivateProviderManager != null) {
             hasPrivateApps = appList.stream().
                     allMatch(mPrivateProviderManager.getItemInfoMatcher());
@@ -377,11 +414,12 @@ public class AlphabeticalAppsList<T extends Context & ActivityContext> implement
             // Create a new section if the section names do not match
             if (!sectionName.equals(lastSectionName)) {
                 lastSectionName = sectionName;
-                mFastScrollerSections.add(new FastScrollSectionInfo(sectionName, startPosition));
+                mFastScrollerSections.add(new FastScrollSectionInfo(hasPrivateApps ?
+                        mPrivateProfileAppScrollerBadge : sectionName, position));
             }
-            startPosition++;
+            position++;
         }
-        return startPosition;
+        return position;
     }
 
     /**
@@ -419,6 +457,10 @@ public class AlphabeticalAppsList<T extends Context & ActivityContext> implement
             }
         }
         return roundRegion;
+    }
+
+    public PrivateProfileManager getPrivateProfileManager() {
+        return mPrivateProviderManager;
     }
 
     private static class MyDiffCallback extends DiffUtil.Callback {

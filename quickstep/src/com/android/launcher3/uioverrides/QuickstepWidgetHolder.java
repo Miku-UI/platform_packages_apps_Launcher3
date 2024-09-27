@@ -15,6 +15,7 @@
  */
 package com.android.launcher3.uioverrides;
 
+import static com.android.launcher3.BuildConfig.WIDGETS_ENABLED;
 import static com.android.launcher3.util.Executors.MAIN_EXECUTOR;
 import static com.android.launcher3.util.Executors.UI_HELPER_EXECUTOR;
 
@@ -26,13 +27,12 @@ import android.util.Log;
 import android.util.SparseArray;
 import android.widget.RemoteViews;
 
+import androidx.annotation.AnyThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.UiThread;
-import androidx.annotation.WorkerThread;
 
 import com.android.launcher3.config.FeatureFlags;
-import com.android.launcher3.model.WidgetsModel;
 import com.android.launcher3.util.IntSet;
 import com.android.launcher3.util.SafeCloseable;
 import com.android.launcher3.widget.LauncherAppWidgetHostView;
@@ -101,7 +101,7 @@ public final class QuickstepWidgetHolder extends LauncherWidgetHolder {
                                     new ArrayList<>(h.mProviderChangedListeners).forEach(
                                     ProviderChangedListener::notifyWidgetProvidersChanged))),
                     UI_HELPER_EXECUTOR.getLooper());
-            if (!WidgetsModel.GO_DISABLE_WIDGETS) {
+            if (WIDGETS_ENABLED) {
                 sWidgetHost.startListening();
             }
         }
@@ -195,7 +195,7 @@ public final class QuickstepWidgetHolder extends LauncherWidgetHolder {
      */
     @Override
     public void stopListening() {
-        if (WidgetsModel.GO_DISABLE_WIDGETS) {
+        if (!WIDGETS_ENABLED) {
             return;
         }
 
@@ -265,6 +265,14 @@ public final class QuickstepWidgetHolder extends LauncherWidgetHolder {
         }
     }
 
+    /**
+     * Clears all the internal widget views excluding the update listeners
+     */
+    @Override
+    public void clearWidgetViews() {
+        mViews.clear();
+    }
+
     private static class QuickstepWidgetHolderListener
             implements AppWidgetHost.AppWidgetHostListener {
 
@@ -288,21 +296,21 @@ public final class QuickstepWidgetHolder extends LauncherWidgetHolder {
         }
 
         @Override
-        @WorkerThread
+        @AnyThread
         public void onUpdateProviderInfo(@Nullable AppWidgetProviderInfo info) {
             mRemoteViews = null;
             executeOnMainExecutor(KEY_PROVIDER_UPDATE, info);
         }
 
         @Override
-        @WorkerThread
+        @AnyThread
         public void updateAppWidget(@Nullable RemoteViews views) {
             mRemoteViews = views;
             executeOnMainExecutor(KEY_VIEWS_UPDATE, mRemoteViews);
         }
 
         @Override
-        @WorkerThread
+        @AnyThread
         public void onViewDataChanged(int viewId) {
             executeOnMainExecutor(KEY_VIEW_DATA_CHANGED, viewId);
         }

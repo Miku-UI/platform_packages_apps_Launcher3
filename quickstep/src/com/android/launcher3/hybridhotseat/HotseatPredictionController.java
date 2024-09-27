@@ -190,7 +190,6 @@ public class HotseatPredictionController implements DragController.DragListener,
     }
 
     private void fillGapsWithPrediction(boolean animate) {
-        Log.d(TAG, "fillGapsWithPrediction flags: " + getStateString(mPauseFlags));
         if (mPauseFlags != 0) {
             return;
         }
@@ -215,16 +214,12 @@ public class HotseatPredictionController implements DragController.DragListener,
             View child = mHotseat.getChildAt(
                     mHotseat.getCellXFromOrder(rank),
                     mHotseat.getCellYFromOrder(rank));
-            Log.d(TAG, "Hotseat app child is: " + child + " and isPredictedIcon() evaluates to"
-                    + ": " + isPredictedIcon(child));
 
             if (child != null && !isPredictedIcon(child)) {
                 continue;
             }
             if (mPredictedItems.size() <= predictionIndex) {
                 // Remove predicted apps from the past
-                Log.d(TAG, "Remove predicted apps from the past\nPrediction Index: "
-                        + predictionIndex);
                 if (isPredictedIcon(child)) {
                     mHotseat.removeView(child);
                 }
@@ -232,11 +227,6 @@ public class HotseatPredictionController implements DragController.DragListener,
             }
             WorkspaceItemInfo predictedItem =
                     (WorkspaceItemInfo) mPredictedItems.get(predictionIndex++);
-            Log.d(TAG, "Predicted item is: " + predictedItem);
-            if (child != null) {
-                Log.d(TAG, "Predicted item is enabled: " + child.isEnabled());
-            }
-
             if (isPredictedIcon(child) && child.isEnabled()) {
                 PredictedAppIcon icon = (PredictedAppIcon) child;
                 boolean animateIconChange = icon.shouldAnimateIconChange(predictedItem);
@@ -256,7 +246,6 @@ public class HotseatPredictionController implements DragController.DragListener,
     }
 
     private void bindItems(List<WorkspaceItemInfo> itemsToAdd, boolean animate) {
-        Log.d(TAG, "bindItems to hotseat: " + itemsToAdd);
         AnimatorSet animationSet = new AnimatorSet();
         for (WorkspaceItemInfo item : itemsToAdd) {
             PredictedAppIcon icon = PredictedAppIcon.createIcon(mHotseat, item);
@@ -296,7 +285,6 @@ public class HotseatPredictionController implements DragController.DragListener,
      * start and pauses predicted apps update on the hotseat
      */
     public void setPauseUIUpdate(boolean paused) {
-        Log.d(TAG, "setPauseUIUpdate parameter `paused` is " + paused);
         mPauseFlags = paused
                 ? (mPauseFlags | FLAG_UPDATE_PAUSED)
                 : (mPauseFlags & ~FLAG_UPDATE_PAUSED);
@@ -306,15 +294,23 @@ public class HotseatPredictionController implements DragController.DragListener,
     }
 
     /**
+     * Ensures that if the flag FLAG_UPDATE_PAUSED is active we set it to false.
+     */
+    public void verifyUIUpdateNotPaused() {
+        if ((mPauseFlags & FLAG_UPDATE_PAUSED) != 0) {
+            setPauseUIUpdate(false);
+            Log.e(TAG, "FLAG_UPDATE_PAUSED should not be set to true (see b/339700174)");
+        }
+    }
+
+    /**
      * Sets or updates the predicted items
      */
     public void setPredictedItems(FixedContainerItems items) {
         mPredictedItems = new ArrayList(items.items);
         if (mPredictedItems.isEmpty()) {
-            Log.d(TAG, "Predicted items is initially empty");
             HotseatRestoreHelper.restoreBackup(mLauncher);
         }
-        Log.d(TAG, "Predicted items: " + mPredictedItems);
         fillGapsWithPrediction();
     }
 
@@ -515,7 +511,7 @@ public class HotseatPredictionController implements DragController.DragListener,
 
         @Override
         public void onClick(View view) {
-            dismissTaskMenuView(mTarget);
+            dismissTaskMenuView();
             pinPrediction(mItemInfo);
         }
     }
@@ -537,7 +533,7 @@ public class HotseatPredictionController implements DragController.DragListener,
     }
 
     public void dump(String prefix, PrintWriter writer) {
-        writer.println(prefix + this.getClass().getSimpleName());
+        writer.println(prefix + "HotseatPredictionController");
         writer.println(prefix + "\tFlags: " + getStateString(mPauseFlags));
         writer.println(prefix + "\tmHotSeatItemsCount: " + mHotSeatItemsCount);
         writer.println(prefix + "\tmPredictedItems: " + mPredictedItems);

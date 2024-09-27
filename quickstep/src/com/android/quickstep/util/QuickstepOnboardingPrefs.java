@@ -27,6 +27,7 @@ import static com.android.launcher3.util.OnboardingPrefs.HOME_BOUNCE_COUNT;
 import static com.android.launcher3.util.OnboardingPrefs.HOME_BOUNCE_SEEN;
 import static com.android.launcher3.util.OnboardingPrefs.HOTSEAT_DISCOVERY_TIP_COUNT;
 
+import com.android.launcher3.Launcher;
 import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.LauncherState;
 import com.android.launcher3.Utilities;
@@ -48,7 +49,7 @@ public class QuickstepOnboardingPrefs {
      * Sets up the initial onboarding behavior for the launcher
      */
     public static void setup(QuickstepLauncher launcher) {
-        StateManager<LauncherState> stateManager = launcher.getStateManager();
+        StateManager<LauncherState, Launcher> stateManager = launcher.getStateManager();
         if (!HOME_BOUNCE_SEEN.get(launcher)) {
             stateManager.addStateListener(new StateListener<LauncherState>() {
                 @Override
@@ -136,21 +137,16 @@ public class QuickstepOnboardingPrefs {
             });
         }
 
-        if (!ALL_APPS_VISITED_COUNT.hasReachedMax(launcher)) {
+        if (!Utilities.isRunningInTestHarness()) {
             launcher.getStateManager().addStateListener(new StateListener<LauncherState>() {
                 @Override
                 public void onStateTransitionComplete(LauncherState finalState) {
                     if (finalState == ALL_APPS) {
                         ALL_APPS_VISITED_COUNT.increment(launcher);
-                        return;
                     }
-
-                    boolean hasReachedMaxCount = ALL_APPS_VISITED_COUNT.hasReachedMax(launcher);
-                    launcher.getAppsView().getFloatingHeaderView().findFixedRowByType(
-                            AppsDividerView.class).setShowAllAppsLabel(!hasReachedMaxCount);
-                    if (hasReachedMaxCount) {
-                        launcher.getStateManager().removeStateListener(this);
-                    }
+                    launcher.getAppsView().getFloatingHeaderView()
+                            .findFixedRowByType(AppsDividerView.class)
+                            .setShowAllAppsLabel(!ALL_APPS_VISITED_COUNT.hasReachedMax(launcher));
                 }
             });
         }

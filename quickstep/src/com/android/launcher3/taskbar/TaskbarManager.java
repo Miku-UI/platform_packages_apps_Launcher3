@@ -16,7 +16,6 @@
 package com.android.launcher3.taskbar;
 
 import static android.content.Context.RECEIVER_NOT_EXPORTED;
-import static android.content.pm.PackageManager.FEATURE_PC;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
@@ -26,10 +25,10 @@ import static com.android.launcher3.Flags.enableUnfoldStateAnimation;
 import static com.android.launcher3.config.FeatureFlags.ENABLE_TASKBAR_NAVBAR_UNIFICATION;
 import static com.android.launcher3.config.FeatureFlags.enableTaskbarNoRecreate;
 import static com.android.launcher3.util.DisplayController.CHANGE_DENSITY;
+import static com.android.launcher3.util.DisplayController.CHANGE_DESKTOP_MODE;
 import static com.android.launcher3.util.DisplayController.CHANGE_NAVIGATION_MODE;
 import static com.android.launcher3.util.DisplayController.CHANGE_TASKBAR_PINNING;
 import static com.android.launcher3.util.DisplayController.TASKBAR_NOT_DESTROYED_TAG;
-import static com.android.launcher3.util.Executors.MAIN_EXECUTOR;
 import static com.android.launcher3.util.Executors.UI_HELPER_EXECUTOR;
 import static com.android.launcher3.util.FlagDebugUtils.formatFlagChange;
 import static com.android.quickstep.util.SystemActionConstants.ACTION_SHOW_TASKBAR;
@@ -43,7 +42,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
-import android.hardware.devicestate.DeviceStateManager;
 import android.hardware.display.DisplayManager;
 import android.net.Uri;
 import android.os.Handler;
@@ -60,9 +58,11 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.android.launcher3.DeviceProfile;
+import com.android.launcher3.Launcher;
 import com.android.launcher3.LauncherAppState;
 import com.android.launcher3.anim.AnimatorPlaybackController;
 import com.android.launcher3.statemanager.StatefulActivity;
+import com.android.launcher3.taskbar.TaskbarNavButtonController.TaskbarNavButtonCallbacks;
 import com.android.launcher3.taskbar.unfold.NonDestroyableScopedUnfoldTransitionProgressProvider;
 import com.android.launcher3.uioverrides.QuickstepLauncher;
 import com.android.launcher3.util.DisplayController;
@@ -71,9 +71,9 @@ import com.android.launcher3.util.SimpleBroadcastReceiver;
 import com.android.quickstep.AllAppsActionManager;
 import com.android.quickstep.RecentsActivity;
 import com.android.quickstep.SystemUiProxy;
-import com.android.quickstep.TouchInteractionService;
 import com.android.quickstep.util.AssistUtils;
 import com.android.systemui.shared.system.QuickStepContract;
+import com.android.systemui.shared.system.QuickStepContract.SystemUiStateFlags;
 import com.android.systemui.unfold.UnfoldTransitionProgressProvider;
 import com.android.systemui.unfold.util.ScopedUnfoldTransitionProgressProvider;
 
@@ -111,7 +111,6 @@ public class TaskbarManager {
 
     private final Context mContext;
     private final @Nullable Context mNavigationBarPanelContext;
-    private final DeviceStateManager mDeviceStateManager;
     private WindowManager mWindowManager;
     private FrameLayout mTaskbarRootLayout;
     private boolean mAddedWindow;
@@ -145,7 +144,7 @@ public class TaskbarManager {
     private class RecreationListener implements DisplayController.DisplayInfoChangeListener {
         @Override
         public void onDisplayInfoChanged(Context context, DisplayController.Info info, int flags) {
-            if ((flags & (CHANGE_DENSITY | CHANGE_NAVIGATION_MODE
+            if ((flags & (CHANGE_DENSITY | CHANGE_NAVIGATION_MODE | CHANGE_DESKTOP_MODE
                     | CHANGE_TASKBAR_PINNING)) != 0) {
                 recreateTaskbar();
             }
@@ -180,8 +179,7 @@ public class TaskbarManager {
         }
     };
 
-    private final UnfoldTransitionProgressProvider.TransitionProgressListener
-            mUnfoldTransitionProgressListener =
+    UnfoldTransitionProgressProvider.TransitionProgressListener mUnfoldTransitionProgressListener =
             new UnfoldTransitionProgressProvider.TransitionProgressListener() {
                 @Override
                 public void onTransitionStarted() {
@@ -210,20 +208,20 @@ public class TaskbarManager {
                 }
             };
 
-    private final DeviceStateManager.FoldStateListener mFoldStateListener;
-    private Boolean mFolded;
-
     @SuppressLint("WrongConstant")
     public TaskbarManager(
-            TouchInteractionService service, AllAppsActionManager allAppsActionManager) {
+            Context context,
+            AllAppsActionManager allAppsActionManager,
+            TaskbarNavButtonCallbacks navCallbacks) {
+
         Display display =
-                service.getSystemService(DisplayManager.class).getDisplay(DEFAULT_DISPLAY);
-        mContext = service.createWindowContext(display,
+                context.getSystemService(DisplayManager.class).getDisplay(DEFAULT_DISPLAY);
+        mContext = context.createWindowContext(display,
                 ENABLE_TASKBAR_NAVBAR_UNIFICATION ? TYPE_NAVIGATION_BAR : TYPE_NAVIGATION_BAR_PANEL,
                 null);
         mAllAppsActionManager = allAppsActionManager;
         mNavigationBarPanelContext = ENABLE_TASKBAR_NAVBAR_UNIFICATION
-                ? service.createWindowContext(display, TYPE_NAVIGATION_BAR_PANEL, null)
+                ? context.createWindowContext(display, TYPE_NAVIGATION_BAR_PANEL, null)
                 : null;
         if (enableTaskbarNoRecreate()) {
             mWindowManager = mContext.getSystemService(WindowManager.class);
@@ -240,31 +238,11 @@ public class TaskbarManager {
                 }
             };
         }
-        // Temporary solution to mitigate the visual jump from folding the device. Currently, the
-        // screen turns on much earlier than we receive the onConfigurationChanged callback or
-        // receiving the correct device profile. While the ideal the solution is to align turning
-        // the screen on after onConfigurationChanged (by either delaying turning on the screen or
-        // figuring out what is causing the delay in getting onConfigurationChanged callback), one
-        // easy temporary mitigation is to dimming the bar so that the visual jump isn't as glaring.
-        mFoldStateListener = new DeviceStateManager.FoldStateListener(mContext, folded -> {
-            boolean firstTime = mFolded == null;
-            if (mTaskbarActivityContext == null) {
-                return;
-            }
-            if (!firstTime && mFolded.booleanValue() != folded) {
-                mTaskbarActivityContext.cancelHideTaskbarWhenFolding();
-            }
-            mFolded = folded;
-            if (folded && !firstTime) {
-                mTaskbarActivityContext.hideTaskbarWhenFolding();
-            } else {
-                mTaskbarActivityContext.resetHideTaskbarWhenUnfolding();
-            }
-        });
-        mDeviceStateManager = mContext.getSystemService(DeviceStateManager.class);
-        mDeviceStateManager.registerCallback(MAIN_EXECUTOR, mFoldStateListener);
-        mNavButtonController = new TaskbarNavButtonController(service,
-                SystemUiProxy.INSTANCE.get(mContext), new Handler(),
+        mNavButtonController = new TaskbarNavButtonController(
+                context,
+                navCallbacks,
+                SystemUiProxy.INSTANCE.get(mContext),
+                new Handler(),
                 AssistUtils.newInstance(mContext));
         mComponentCallbacks = new ComponentCallbacks() {
             private Configuration mOldConfig = mContext.getResources().getConfiguration();
@@ -369,12 +347,12 @@ public class TaskbarManager {
 
     /**
      * Toggles All Apps for Taskbar or Launcher depending on the current state.
-     *
-     * @param homeAllAppsIntent Intent used if Taskbar is not enabled or Launcher is resumed.
      */
-    public void toggleAllApps(Intent homeAllAppsIntent) {
+    public void toggleAllApps() {
         if (mTaskbarActivityContext == null || mTaskbarActivityContext.canToggleHomeAllApps()) {
-            mContext.startActivity(homeAllAppsIntent);
+            // Home All Apps should be toggled from this class, because the controllers are not
+            // initialized when Taskbar is disabled (i.e. TaskbarActivityContext is null).
+            if (mActivity instanceof Launcher l) l.toggleAllAppsSearch();
         } else {
             mTaskbarActivityContext.toggleAllAppsSearch();
         }
@@ -449,9 +427,6 @@ public class TaskbarManager {
      */
     private TaskbarUIController createTaskbarUIControllerForActivity(StatefulActivity activity) {
         if (activity instanceof QuickstepLauncher) {
-            if (mTaskbarActivityContext.getPackageManager().hasSystemFeature(FEATURE_PC)) {
-                return new DesktopTaskbarUIController((QuickstepLauncher) activity);
-            }
             return new LauncherTaskbarUIController((QuickstepLauncher) activity);
         }
         if (activity instanceof RecentsActivity) {
@@ -473,7 +448,8 @@ public class TaskbarManager {
                 LauncherAppState.getIDP(mContext).getDeviceProfile(mContext) : null;
 
             // All Apps action is unrelated to navbar unification, so we only need to check DP.
-            mAllAppsActionManager.setTaskbarPresent(dp != null && dp.isTaskbarPresent);
+            final boolean isLargeScreenTaskbar = dp != null && dp.isTaskbarPresent;
+            mAllAppsActionManager.setTaskbarPresent(isLargeScreenTaskbar);
 
             destroyExistingTaskbar();
 
@@ -499,6 +475,7 @@ public class TaskbarManager {
             }
             mSharedState.startTaskbarVariantIsTransient =
                     DisplayController.isTransientTaskbar(mTaskbarActivityContext);
+            mSharedState.allAppsVisible = mSharedState.allAppsVisible && isLargeScreenTaskbar;
             mTaskbarActivityContext.init(mSharedState);
 
             if (mActivity != null) {
@@ -517,7 +494,7 @@ public class TaskbarManager {
         }
     }
 
-    public void onSystemUiFlagsChanged(int systemUiStateFlags) {
+    public void onSystemUiFlagsChanged(@SystemUiStateFlags long systemUiStateFlags) {
         if (DEBUG) {
             Log.d(TAG, "SysUI flags changed: " + formatFlagChange(systemUiStateFlags,
                     mSharedState.sysuiStateFlags, QuickStepContract::getSystemUiStateString));
@@ -544,7 +521,7 @@ public class TaskbarManager {
         }
     }
 
-    private static boolean isTaskbarEnabled(DeviceProfile deviceProfile) {
+    private boolean isTaskbarEnabled(DeviceProfile deviceProfile) {
         return ENABLE_TASKBAR_NAVBAR_UNIFICATION || deviceProfile.isTaskbarPresent;
     }
 
@@ -621,7 +598,6 @@ public class TaskbarManager {
         Log.d(TASKBAR_NOT_DESTROYED_TAG, "unregistering component callbacks from destroy().");
         mContext.unregisterComponentCallbacks(mComponentCallbacks);
         mContext.unregisterReceiver(mShutdownReceiver);
-        mDeviceStateManager.unregisterCallback(mFoldStateListener);
     }
 
     public @Nullable TaskbarActivityContext getCurrentActivityContext() {
@@ -637,7 +613,8 @@ public class TaskbarManager {
         }
     }
 
-    private void addTaskbarRootViewToWindow() {
+    @VisibleForTesting
+    void addTaskbarRootViewToWindow() {
         if (enableTaskbarNoRecreate() && !mAddedWindow && mTaskbarActivityContext != null) {
             mWindowManager.addView(mTaskbarRootLayout,
                     mTaskbarActivityContext.getWindowLayoutParams());
@@ -645,7 +622,8 @@ public class TaskbarManager {
         }
     }
 
-    private void removeTaskbarRootViewFromWindow() {
+    @VisibleForTesting
+    void removeTaskbarRootViewFromWindow() {
         if (enableTaskbarNoRecreate() && mAddedWindow) {
             mWindowManager.removeViewImmediate(mTaskbarRootLayout);
             mAddedWindow = false;

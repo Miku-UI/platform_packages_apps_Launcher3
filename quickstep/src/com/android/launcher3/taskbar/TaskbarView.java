@@ -15,15 +15,16 @@
  */
 package com.android.launcher3.taskbar;
 
-import static android.content.pm.PackageManager.FEATURE_PC;
 import static android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
 
+import static com.android.launcher3.BubbleTextView.DISPLAY_TASKBAR;
 import static com.android.launcher3.Flags.enableCursorHoverStates;
 import static com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_APP_PAIR;
 import static com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_FOLDER;
 import static com.android.launcher3.config.FeatureFlags.ENABLE_ALL_APPS_SEARCH_IN_TASKBAR;
 import static com.android.launcher3.config.FeatureFlags.enableTaskbarPinning;
 import static com.android.launcher3.icons.IconNormalizer.ICON_VISIBLE_AREA_FACTOR;
+import static com.android.launcher3.util.Executors.MAIN_EXECUTOR;
 
 import android.content.Context;
 import android.content.res.Resources;
@@ -31,10 +32,12 @@ import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.util.AttributeSet;
+import android.view.DisplayCutout;
 import android.view.InputDevice;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
 
@@ -52,6 +55,8 @@ import com.android.launcher3.Utilities;
 import com.android.launcher3.apppairs.AppPairIcon;
 import com.android.launcher3.folder.FolderIcon;
 import com.android.launcher3.folder.PreviewBackground;
+import com.android.launcher3.model.data.AppPairInfo;
+import com.android.launcher3.model.data.CollectionInfo;
 import com.android.launcher3.model.data.FolderInfo;
 import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.model.data.WorkspaceItemInfo;
@@ -60,6 +65,8 @@ import com.android.launcher3.util.LauncherBindableItemsContainer;
 import com.android.launcher3.util.Themes;
 import com.android.launcher3.views.ActivityContext;
 import com.android.launcher3.views.IconButtonView;
+import com.android.quickstep.DeviceConfigWrapper;
+import com.android.quickstep.util.AssistStateManager;
 
 import java.util.function.Predicate;
 
@@ -68,8 +75,6 @@ import java.util.function.Predicate;
  */
 public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconParent, Insettable,
         DeviceProfile.OnDeviceProfileChangeListener {
-    private static final String TAG = TaskbarView.class.getSimpleName();
-
     private static final Rect sTmpRect = new Rect();
 
     private final int[] mTempOutLocation = new int[2];
@@ -92,6 +97,9 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
 
     // Only non-null when device supports having an All Apps button.
     private @Nullable IconButtonView mAllAppsButton;
+    private Runnable mAllAppsTouchRunnable;
+    private long mAllAppsButtonTouchDelayMs;
+    private boolean mAllAppsTouchTriggered;
 
     // Only non-null when device supports having an All Apps button.
     private @Nullable IconButtonView mTaskbarDivider;
@@ -126,12 +134,11 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
         mIsRtl = Utilities.isRtl(resources);
         mTransientTaskbarMinWidth = resources.getDimension(R.dimen.transient_taskbar_min_width);
 
-
         onDeviceProfileChanged(mActivityContext.getDeviceProfile());
 
         int actualMargin = resources.getDimensionPixelSize(R.dimen.taskbar_icon_spacing);
         int actualIconSize = mActivityContext.getDeviceProfile().taskbarIconSize;
-        if (enableTaskbarPinning()) {
+        if (enableTaskbarPinning() && !mActivityContext.isThreeButtonNav()) {
             DeviceProfile deviceProfile = mActivityContext.getTransientTaskbarDeviceProfile();
             actualIconSize = deviceProfile.taskbarIconSize;
         }
@@ -153,27 +160,28 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
         // Needed to draw folder leave-behind when opening one.
         setWillNotDraw(false);
 
-        if (!mActivityContext.getPackageManager().hasSystemFeature(FEATURE_PC)) {
-            mAllAppsButton = (IconButtonView) LayoutInflater.from(context)
-                    .inflate(R.layout.taskbar_all_apps_button, this, false);
-            mAllAppsButton.setIconDrawable(resources.getDrawable(
-                    getAllAppsButton(isTransientTaskbar)));
-            mAllAppsButton.setPadding(mItemPadding, mItemPadding, mItemPadding, mItemPadding);
-            mAllAppsButton.setForegroundTint(
-                    mActivityContext.getColor(R.color.all_apps_button_color));
+        mAllAppsButton = (IconButtonView) LayoutInflater.from(context)
+                .inflate(R.layout.taskbar_all_apps_button, this, false);
+        mAllAppsButton.setIconDrawable(resources.getDrawable(
+                getAllAppsButton(isTransientTaskbar)));
+        mAllAppsButton.setPadding(mItemPadding, mItemPadding, mItemPadding, mItemPadding);
+        mAllAppsButton.setForegroundTint(
+                mActivityContext.getColor(R.color.all_apps_button_color));
 
-            if (enableTaskbarPinning()) {
-                mTaskbarDivider = (IconButtonView) LayoutInflater.from(context).inflate(
-                        R.layout.taskbar_divider,
-                        this, false);
-                mTaskbarDivider.setIconDrawable(
-                        resources.getDrawable(R.drawable.taskbar_divider_button));
-                mTaskbarDivider.setPadding(mItemPadding, mItemPadding, mItemPadding, mItemPadding);
-            }
+        if (enableTaskbarPinning()) {
+            mTaskbarDivider = (IconButtonView) LayoutInflater.from(context).inflate(
+                    R.layout.taskbar_divider,
+                    this, false);
+            mTaskbarDivider.setIconDrawable(
+                    resources.getDrawable(R.drawable.taskbar_divider_button));
+            mTaskbarDivider.setPadding(mItemPadding, mItemPadding, mItemPadding, mItemPadding);
         }
 
         // TODO: Disable touch events on QSB otherwise it can crash.
         mQsb = LayoutInflater.from(context).inflate(R.layout.search_container_hotseat, this, false);
+
+        // Default long press (touch) delay = 400ms
+        mAllAppsButtonTouchDelayMs = ViewConfiguration.getLongPressTimeout();
     }
 
     @DrawableRes
@@ -264,13 +272,22 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
         mIconLongClickListener = mControllerCallbacks.getIconOnLongClickListener();
 
         if (mAllAppsButton != null) {
-            mAllAppsButton.setOnClickListener(mControllerCallbacks.getAllAppsButtonClickListener());
-            mAllAppsButton.setOnLongClickListener(
-                    mControllerCallbacks.getAllAppsButtonLongClickListener());
+            mAllAppsButton.setOnClickListener(this::onAllAppsButtonClick);
+            mAllAppsButton.setOnLongClickListener(this::onAllAppsButtonLongClick);
+            mAllAppsButton.setOnTouchListener(this::onAllAppsButtonTouch);
             mAllAppsButton.setHapticFeedbackEnabled(
                     mControllerCallbacks.isAllAppsButtonHapticFeedbackEnabled());
+            mAllAppsTouchRunnable = () -> {
+                mControllerCallbacks.triggerAllAppsButtonLongClick();
+                mAllAppsTouchTriggered = true;
+            };
+            AssistStateManager assistStateManager = AssistStateManager.INSTANCE.get(mContext);
+            if (DeviceConfigWrapper.get().getCustomLpaaThresholds()
+                    && assistStateManager.getLPNHDurationMillis().isPresent()) {
+                mAllAppsButtonTouchDelayMs = assistStateManager.getLPNHDurationMillis().get();
+            }
         }
-        if (mTaskbarDivider != null) {
+        if (mTaskbarDivider != null && !mActivityContext.isThreeButtonNav()) {
             mTaskbarDivider.setOnLongClickListener(
                     mControllerCallbacks.getTaskbarDividerLongClickListener());
             mTaskbarDivider.setOnTouchListener(
@@ -282,7 +299,7 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
         removeView(view);
         view.setOnClickListener(null);
         view.setOnLongClickListener(null);
-        if (!(view.getTag() instanceof FolderInfo)) {
+        if (!(view.getTag() instanceof CollectionInfo)) {
             mActivityContext.getViewCache().recycleView(view.getSourceLayoutResId(), view);
         }
         view.setTag(null);
@@ -304,7 +321,6 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
         }
         removeView(mQsb);
 
-
         for (int i = 0; i < hotseatItemInfos.length; i++) {
             ItemInfo hotseatItemInfo = hotseatItemInfos[i];
             if (hotseatItemInfo == null) {
@@ -316,8 +332,8 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
             boolean isCollection = false;
             if (hotseatItemInfo.isPredictedItem()) {
                 expectedLayoutResId = R.layout.taskbar_predicted_app_icon;
-            } else if (hotseatItemInfo instanceof FolderInfo fi) {
-                expectedLayoutResId = fi.itemType == ITEM_TYPE_APP_PAIR
+            } else if (hotseatItemInfo instanceof CollectionInfo ci) {
+                expectedLayoutResId = ci.itemType == ITEM_TYPE_APP_PAIR
                         ? R.layout.app_pair_icon
                         : R.layout.folder_icon;
                 isCollection = true;
@@ -345,16 +361,18 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
 
             if (hotseatView == null) {
                 if (isCollection) {
-                    FolderInfo folderInfo = (FolderInfo) hotseatItemInfo;
+                    CollectionInfo collectionInfo = (CollectionInfo) hotseatItemInfo;
                     switch (hotseatItemInfo.itemType) {
                         case ITEM_TYPE_FOLDER:
                             hotseatView = FolderIcon.inflateFolderAndIcon(
-                                    expectedLayoutResId, mActivityContext, this, folderInfo);
+                                    expectedLayoutResId, mActivityContext, this,
+                                    (FolderInfo) collectionInfo);
                             ((FolderIcon) hotseatView).setTextVisible(false);
                             break;
                         case ITEM_TYPE_APP_PAIR:
                             hotseatView = AppPairIcon.inflateIcon(
-                                    expectedLayoutResId, mActivityContext, this, folderInfo);
+                                    expectedLayoutResId, mActivityContext, this,
+                                    (AppPairInfo) collectionInfo, DISPLAY_TASKBAR);
                             ((AppPairIcon) hotseatView).setTextVisible(false);
                             break;
                         default:
@@ -465,6 +483,29 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
                     : (right - navSpaceNeeded) - centerAlignIconEnd;
 
             iconEnd = centerAlignIconEnd + offset;
+        }
+
+        // Currently, we support only one device with display cutout and we only are concern about
+        // it when the bottom rect is present and non empty
+        DisplayCutout displayCutout = getDisplay().getCutout();
+        if (displayCutout != null && !displayCutout.getBoundingRectBottom().isEmpty()) {
+            Rect cutoutBottomRect = displayCutout.getBoundingRectBottom();
+            // when cutout present at the bottom of screen align taskbar icons to cutout offset
+            // if taskbar icon overlaps with cutout
+            int taskbarIconLeftBound = iconEnd - spaceNeeded;
+            int taskbarIconRightBound = iconEnd;
+
+            boolean doesTaskbarIconsOverlapWithCutout =
+                    taskbarIconLeftBound <= cutoutBottomRect.centerX()
+                            && cutoutBottomRect.centerX() <= taskbarIconRightBound;
+
+            if (doesTaskbarIconsOverlapWithCutout) {
+                if (!layoutRtl) {
+                    iconEnd = spaceNeeded + cutoutBottomRect.width();
+                } else {
+                    iconEnd = right - cutoutBottomRect.width();
+                }
+            }
         }
 
         sTmpRect.set(mIconLayoutBounds);
@@ -662,5 +703,47 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
             }
         }
         return mAllAppsButton;
+    }
+
+    private boolean onAllAppsButtonTouch(View view, MotionEvent ev) {
+        switch (ev.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                mAllAppsTouchTriggered = false;
+                MAIN_EXECUTOR.getHandler().postDelayed(
+                        mAllAppsTouchRunnable, mAllAppsButtonTouchDelayMs);
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                cancelAllAppsButtonTouch();
+        }
+        return false;
+    }
+
+    private void cancelAllAppsButtonTouch() {
+        MAIN_EXECUTOR.getHandler().removeCallbacks(mAllAppsTouchRunnable);
+        // ACTION_UP is first triggered, then click listener / long-click listener is triggered on
+        // the next frame, so we need to post twice and delay the reset.
+        if (mAllAppsButton != null) {
+            mAllAppsButton.post(() -> {
+                mAllAppsButton.post(() -> {
+                    mAllAppsTouchTriggered = false;
+                });
+            });
+        }
+    }
+
+    private void onAllAppsButtonClick(View view) {
+        if (!mAllAppsTouchTriggered) {
+            mControllerCallbacks.triggerAllAppsButtonClick(view);
+        }
+    }
+
+    // Handle long click from Switch Access and Voice Access
+    private boolean onAllAppsButtonLongClick(View view) {
+        if (!MAIN_EXECUTOR.getHandler().hasCallbacks(mAllAppsTouchRunnable)
+                && !mAllAppsTouchTriggered) {
+            mControllerCallbacks.triggerAllAppsButtonLongClick();
+        }
+        return true;
     }
 }

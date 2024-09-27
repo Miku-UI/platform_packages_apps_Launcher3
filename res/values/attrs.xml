@@ -43,14 +43,16 @@
     <attr name="popupNotificationDotColor" format="color" />
     <attr name="notificationDotColor" format="color" />
     <attr name="focusOutlineColor" format="color" />
+    <attr name="focusInnerOutlineColor" format="color" />
 
-    <attr name="folderPaginationColor" format="color" />
+    <attr name="pageIndicatorDotColor" format="color" />
     <attr name="folderPreviewColor" format="color" />
     <attr name="folderBackgroundColor" format="color" />
     <attr name="folderIconRadius" format="float" />
     <attr name="folderIconBorderColor" format="color" />
     <attr name="folderTextColor" format="color" />
     <attr name="folderHintTextColor" format="color" />
+    <attr name="appPairSurfaceInFolder" format="color" />
     <attr name="isFolderDarkText" format="boolean" />
     <attr name="workspaceAccentColor" format="color" />
     <attr name="workspaceSurfaceColor" format="color" />
@@ -72,6 +74,10 @@
     <attr name="widgetPickerSelectedTabTextColor" format="color"/>
     <attr name="widgetPickerUnselectedTabTextColor" format="color"/>
     <attr name="widgetPickerCollapseHandleColor" format="color"/>
+    <attr name="widgetPickerAddButtonBackgroundColor" format="color"/>
+    <attr name="widgetPickerAddButtonTextColor" format="color"/>
+    <attr name="widgetCellTitleColor" format="color" />
+    <attr name="widgetCellSubtitleColor" format="color" />
 
     <!-- BubbleTextView specific attributes. -->
     <declare-styleable name="BubbleTextView">
@@ -199,17 +205,6 @@
         <!-- Number of icons to use when extending the hotseat size,
          defaults to 2 * numHotseatIcons -->
         <attr name="numExtendedHotseatIcons" format="integer" />
-
-        <!-- alignment of hotseat to the grid.
-        Not applicable for 3 button mode when taskbar is enabled -->
-        <!-- defaults to numColumns, if not specified -->
-        <attr name="hotseatColumnSpan" format="integer" />
-        <!-- defaults to numColumns, if not specified -->
-        <attr name="hotseatColumnSpanLandscape" format="integer" />
-        <!-- defaults to numColumns, if not specified -->
-        <attr name="hotseatColumnSpanTwoPanelLandscape" format="integer" />
-        <!-- defaults to numColumns, if not specified -->
-        <attr name="hotseatColumnSpanTwoPanelPortrait" format="integer" />
 
         <!-- Spacing to have at the end of the nav buttons in large screen 3 button nav,
              defaults to @dimen/taskbar_button_margin_default -->

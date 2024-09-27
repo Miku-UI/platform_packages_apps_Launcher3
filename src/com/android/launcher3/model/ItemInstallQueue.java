@@ -40,11 +40,11 @@ import android.util.Pair;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
+import com.android.launcher3.Flags;
 import com.android.launcher3.InvariantDeviceProfile;
 import com.android.launcher3.Launcher;
 import com.android.launcher3.LauncherAppState;
 import com.android.launcher3.LauncherSettings.Favorites;
-import com.android.launcher3.Utilities;
 import com.android.launcher3.logging.FileLog;
 import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.model.data.LauncherAppWidgetInfo;
@@ -54,6 +54,7 @@ import com.android.launcher3.shortcuts.ShortcutRequest;
 import com.android.launcher3.util.MainThreadInitializedObject;
 import com.android.launcher3.util.PersistedItemArray;
 import com.android.launcher3.util.Preconditions;
+import com.android.launcher3.util.SafeCloseable;
 import com.android.launcher3.widget.LauncherAppWidgetProviderInfo;
 
 import java.util.HashSet;
@@ -64,7 +65,7 @@ import java.util.stream.Stream;
 /**
  * Class to maintain a queue of pending items to be added to the workspace.
  */
-public class ItemInstallQueue {
+public class ItemInstallQueue implements SafeCloseable {
 
     private static final String LOG = "ItemInstallQueue";
 
@@ -97,6 +98,9 @@ public class ItemInstallQueue {
     private ItemInstallQueue(Context context) {
         mContext = context;
     }
+
+    @Override
+    public void close() {}
 
     @WorkerThread
     private void ensureQueueLoaded() {
@@ -300,7 +304,7 @@ public class ItemInstallQueue {
                     } else {
                         lai = laiList.get(0);
                         si.intent = makeLaunchIntent(lai);
-                        if (Utilities.enableSupportForArchiving()
+                        if (Flags.enableSupportForArchiving()
                                 && lai.getActivityInfo().isArchived) {
                             si.runtimeStatusFlags |= FLAG_ARCHIVED;
                         }

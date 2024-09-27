@@ -18,8 +18,8 @@ package com.android.launcher3.model;
 import static android.text.format.DateUtils.DAY_IN_MILLIS;
 import static android.text.format.DateUtils.formatElapsedTime;
 
-import static com.android.launcher3.LauncherPrefs.nonRestorableItem;
 import static com.android.launcher3.EncryptionType.ENCRYPTED;
+import static com.android.launcher3.LauncherPrefs.nonRestorableItem;
 import static com.android.launcher3.LauncherSettings.Favorites.CONTAINER_HOTSEAT_PREDICTION;
 import static com.android.launcher3.LauncherSettings.Favorites.CONTAINER_PREDICTION;
 import static com.android.launcher3.LauncherSettings.Favorites.CONTAINER_WIDGETS_PREDICTION;
@@ -65,13 +65,15 @@ import com.android.launcher3.logging.InstanceId;
 import com.android.launcher3.logging.InstanceIdSequence;
 import com.android.launcher3.model.BgDataModel.FixedContainerItems;
 import com.android.launcher3.model.data.AppInfo;
-import com.android.launcher3.model.data.FolderInfo;
+import com.android.launcher3.model.data.CollectionInfo;
 import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.model.data.WorkspaceItemInfo;
 import com.android.launcher3.pm.UserCache;
 import com.android.launcher3.shortcuts.ShortcutKey;
+import com.android.launcher3.util.ApiWrapper;
 import com.android.launcher3.util.Executors;
 import com.android.launcher3.util.IntSparseArrayMap;
+import com.android.launcher3.util.PackageManagerHelper;
 import com.android.launcher3.util.PersistedItemArray;
 import com.android.quickstep.logging.SettingsChangeLogger;
 import com.android.quickstep.logging.StatsLogCompatManager;
@@ -111,12 +113,11 @@ public class QuickstepModelDelegate extends ModelDelegate {
     private final InvariantDeviceProfile mIDP;
     private final AppEventProducer mAppEventProducer;
     private final StatsManager mStatsManager;
-    private final Context mContext;
 
     protected boolean mActive = false;
 
     public QuickstepModelDelegate(Context context) {
-        mContext = context;
+        super(context);
         mAppEventProducer = new AppEventProducer(context, this::onAppTargetEvent);
 
         mIDP = InvariantDeviceProfile.INSTANCE.get(context);
@@ -150,7 +151,8 @@ public class QuickstepModelDelegate extends ModelDelegate {
         // TODO: Implement caching and preloading
 
         WorkspaceItemFactory factory =
-                new WorkspaceItemFactory(mApp, ums, pinnedShortcuts, numColumns, state.containerId);
+                new WorkspaceItemFactory(mApp, ums, mPmHelper, pinnedShortcuts, numColumns,
+                        state.containerId);
         FixedContainerItems fci = new FixedContainerItems(state.containerId,
                 state.storage.read(mApp.getContext(), factory, ums.allUsers::get));
         if (FeatureFlags.CHANGE_MODEL_DELEGATE_LOADING_ORDER.get()) {
@@ -233,7 +235,7 @@ public class QuickstepModelDelegate extends ModelDelegate {
             }
             InstanceId instanceId = new InstanceIdSequence().newInstanceId();
             for (ItemInfo info : itemsIdMap) {
-                FolderInfo parent = getContainer(info, itemsIdMap);
+                CollectionInfo parent = getContainer(info, itemsIdMap);
                 StatsLogCompatManager.writeSnapshot(info.buildProto(parent), instanceId);
             }
             additionalSnapshotEvents(instanceId);
@@ -270,7 +272,7 @@ public class QuickstepModelDelegate extends ModelDelegate {
                         }
 
                         for (ItemInfo info : itemsIdMap) {
-                            FolderInfo parent = getContainer(info, itemsIdMap);
+                            CollectionInfo parent = getContainer(info, itemsIdMap);
                             LauncherAtom.ItemInfo itemInfo = info.buildProto(parent);
                             Log.d(TAG, itemInfo.toString());
                             StatsEvent statsEvent = StatsLogCompatManager.buildStatsEvent(itemInfo,
@@ -293,18 +295,19 @@ public class QuickstepModelDelegate extends ModelDelegate {
         }
     }
 
-    private static FolderInfo getContainer(ItemInfo info, IntSparseArrayMap<ItemInfo> itemsIdMap) {
+    private static CollectionInfo getContainer(
+            ItemInfo info, IntSparseArrayMap<ItemInfo> itemsIdMap) {
         if (info.container > 0) {
             ItemInfo containerInfo = itemsIdMap.get(info.container);
 
-            if (!(containerInfo instanceof FolderInfo)) {
+            if (!(containerInfo instanceof CollectionInfo)) {
                 Log.e(TAG, String.format(
                         "Item info: %s found with invalid container: %s",
                         info,
                         containerInfo));
             }
             // Allow crash to help debug b/173838775
-            return (FolderInfo) containerInfo;
+            return (CollectionInfo) containerInfo;
         }
         return null;
     }
@@ -325,8 +328,12 @@ public class QuickstepModelDelegate extends ModelDelegate {
         super.destroy();
         mActive = false;
         StatsLogCompatManager.LOGS_CONSUMER.remove(mAppEventProducer);
-        if (mIsPrimaryInstance) {
-            mStatsManager.clearPullAtomCallback(SysUiStatsLog.LAUNCHER_LAYOUT_SNAPSHOT);
+        if (mIsPrimaryInstance && mStatsManager != null) {
+            try {
+                mStatsManager.clearPullAtomCallback(SysUiStatsLog.LAUNCHER_LAYOUT_SNAPSHOT);
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Failed to unregister snapshot logging callback with StatsManager", e);
+            }
         }
         destroyPredictors();
     }
@@ -525,6 +532,7 @@ public class QuickstepModelDelegate extends ModelDelegate {
 
         private final LauncherAppState mAppState;
         private final UserManagerState mUMS;
+        private final PackageManagerHelper mPmHelper;
         private final Map<ShortcutKey, ShortcutInfo> mPinnedShortcuts;
         private final int mMaxCount;
         private final int mContainer;
@@ -532,9 +540,11 @@ public class QuickstepModelDelegate extends ModelDelegate {
         private int mReadCount = 0;
 
         protected WorkspaceItemFactory(LauncherAppState appState, UserManagerState ums,
-                Map<ShortcutKey, ShortcutInfo> pinnedShortcuts, int maxCount, int container) {
+                PackageManagerHelper pmHelper, Map<ShortcutKey, ShortcutInfo> pinnedShortcuts,
+                int maxCount, int container) {
             mAppState = appState;
             mUMS = ums;
+            mPmHelper = pmHelper;
             mPinnedShortcuts = pinnedShortcuts;
             mMaxCount = maxCount;
             mContainer = container;
@@ -557,6 +567,8 @@ public class QuickstepModelDelegate extends ModelDelegate {
                     AppInfo info = new AppInfo(
                             lai,
                             UserCache.INSTANCE.get(mAppState.getContext()).getUserInfo(user),
+                            ApiWrapper.INSTANCE.get(mAppState.getContext()),
+                            mPmHelper,
                             mUMS.isUserQuiet(user));
                     info.container = mContainer;
                     mAppState.getIconCache().getTitleAndIcon(info, lai, false);

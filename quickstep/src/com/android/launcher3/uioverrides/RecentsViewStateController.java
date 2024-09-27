@@ -21,7 +21,6 @@ import static com.android.launcher3.LauncherState.OVERVIEW;
 import static com.android.launcher3.LauncherState.OVERVIEW_ACTIONS;
 import static com.android.launcher3.LauncherState.OVERVIEW_SPLIT_SELECT;
 import static com.android.launcher3.states.StateAnimationConfig.ANIM_OVERVIEW_ACTIONS_FADE;
-import static com.android.launcher3.util.MultiPropertyFactory.MULTI_PROPERTY_VALUE;
 import static com.android.quickstep.views.RecentsView.CONTENT_ALPHA;
 import static com.android.quickstep.views.RecentsView.FULLSCREEN_PROGRESS;
 import static com.android.quickstep.views.RecentsView.TASK_MODALNESS;
@@ -41,6 +40,7 @@ import androidx.annotation.NonNull;
 
 import com.android.launcher3.LauncherState;
 import com.android.launcher3.Utilities;
+import com.android.launcher3.anim.AnimatedFloat;
 import com.android.launcher3.anim.AnimatorListeners;
 import com.android.launcher3.anim.PendingAnimation;
 import com.android.launcher3.anim.PropertySetter;
@@ -67,7 +67,7 @@ public final class RecentsViewStateController extends
     @Override
     public void setState(@NonNull LauncherState state) {
         super.setState(state);
-        if (state.overviewUi) {
+        if (state.isRecentsViewVisible) {
             mRecentsView.updateEmptyMessage();
         } else {
             mRecentsView.resetTaskVisuals();
@@ -76,7 +76,7 @@ public final class RecentsViewStateController extends
         mRecentsView.setFullscreenProgress(state.getOverviewFullscreenProgress());
         // In Overview, we may be layering app surfaces behind Launcher, so we need to notify
         // DepthController to prevent optimizations which might occlude the layers behind
-        mLauncher.getDepthController().setHasContentBehindLauncher(state.overviewUi);
+        mLauncher.getDepthController().setHasContentBehindLauncher(state.isRecentsViewVisible);
 
         PendingAnimation builder =
                 new PendingAnimation(state.getTransitionDuration(mLauncher, true));
@@ -89,7 +89,7 @@ public final class RecentsViewStateController extends
             @NonNull StateAnimationConfig config, @NonNull PendingAnimation builder) {
         super.setStateWithAnimationInternal(toState, config, builder);
 
-        if (toState.overviewUi) {
+        if (toState.isRecentsViewVisible) {
             // While animating into recents, update the visible task data as needed
             builder.addOnFrameCallback(() -> mRecentsView.loadVisibleTaskData(FLAG_UPDATE_ALL));
             mRecentsView.updateEmptyMessage();
@@ -107,7 +107,8 @@ public final class RecentsViewStateController extends
         // In Overview, we may be layering app surfaces behind Launcher, so we need to notify
         // DepthController to prevent optimizations which might occlude the layers behind
         builder.addListener(AnimatorListeners.forSuccessCallback(() ->
-                mLauncher.getDepthController().setHasContentBehindLauncher(toState.overviewUi)));
+                mLauncher.getDepthController().setHasContentBehindLauncher(
+                        toState.isRecentsViewVisible)));
 
         handleSplitSelectionState(toState, builder, /* animate */true);
 
@@ -133,7 +134,7 @@ public final class RecentsViewStateController extends
         // Create transition animations to split select
         RecentsPagedOrientationHandler orientationHandler =
                 ((RecentsView) mLauncher.getOverviewPanel()).getPagedOrientationHandler();
-        Pair<FloatProperty, FloatProperty> taskViewsFloat =
+        Pair<FloatProperty<RecentsView>, FloatProperty<RecentsView>> taskViewsFloat =
                 orientationHandler.getSplitSelectTaskOffset(
                         TASK_PRIMARY_SPLIT_TRANSLATION, TASK_SECONDARY_SPLIT_TRANSLATION,
                         mLauncher.getDeviceProfile());
@@ -168,7 +169,7 @@ public final class RecentsViewStateController extends
                 clearAllButtonAlpha, LINEAR);
         float overviewButtonAlpha = state.areElementsVisible(mLauncher, OVERVIEW_ACTIONS) ? 1 : 0;
         propertySetter.setFloat(mLauncher.getActionsView().getVisibilityAlpha(),
-                MULTI_PROPERTY_VALUE, overviewButtonAlpha, config.getInterpolator(
+                AnimatedFloat.VALUE, overviewButtonAlpha, config.getInterpolator(
                         ANIM_OVERVIEW_ACTIONS_FADE, LINEAR));
     }
 

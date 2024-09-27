@@ -46,6 +46,7 @@ import android.text.TextUtils;
 import android.text.TextUtils.TruncateAt;
 import android.util.AttributeSet;
 import android.util.Property;
+import android.util.Size;
 import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -58,7 +59,6 @@ import androidx.annotation.UiThread;
 import androidx.annotation.VisibleForTesting;
 
 import com.android.launcher3.accessibility.BaseAccessibilityDelegate;
-import com.android.launcher3.config.FeatureFlags;
 import com.android.launcher3.dot.DotInfo;
 import com.android.launcher3.dragndrop.DragOptions.PreDragCondition;
 import com.android.launcher3.dragndrop.DraggableView;
@@ -96,10 +96,10 @@ import java.util.Locale;
 public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
         IconLabelDotView, DraggableView, Reorderable {
 
-    private static final int DISPLAY_WORKSPACE = 0;
+    public static final int DISPLAY_WORKSPACE = 0;
     public static final int DISPLAY_ALL_APPS = 1;
-    private static final int DISPLAY_FOLDER = 2;
-    protected static final int DISPLAY_TASKBAR = 5;
+    public static final int DISPLAY_FOLDER = 2;
+    public static final int DISPLAY_TASKBAR = 5;
     public static final int DISPLAY_SEARCH_RESULT = 6;
     public static final int DISPLAY_SEARCH_RESULT_SMALL = 7;
     public static final int DISPLAY_PREDICTION_ROW = 8;
@@ -183,6 +183,24 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
     private Animator mDotScaleAnim;
     private boolean mForceHideDot;
 
+    // These fields, related to showing running apps, are only used for Taskbar.
+    private final Size mRunningAppIndicatorSize;
+    private final int mRunningAppIndicatorTopMargin;
+    private final Size mMinimizedAppIndicatorSize;
+    private final int mMinimizedAppIndicatorTopMargin;
+    private final Paint mRunningAppIndicatorPaint;
+    private final Rect mRunningAppIconBounds = new Rect();
+    private RunningAppState mRunningAppState;
+
+    /**
+     * Various options for the running state of an app.
+     */
+    public enum RunningAppState {
+        NOT_RUNNING,
+        RUNNING,
+        MINIMIZED,
+    }
+
     @ViewDebug.ExportedProperty(category = "launcher")
     private boolean mStayPressed;
     @ViewDebug.ExportedProperty(category = "launcher")
@@ -238,7 +256,7 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
             defaultIconSize = getResources().getDimensionPixelSize(
                     R.dimen.search_row_small_icon_size);
         } else if (mDisplay == DISPLAY_TASKBAR) {
-            defaultIconSize = mDeviceProfile.iconSizePx;
+            defaultIconSize = mDeviceProfile.taskbarIconSize;
         } else {
             // widget_selection or shortcut_popup
             defaultIconSize = mDeviceProfile.iconSizePx;
@@ -248,6 +266,23 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
         mIconSize = a.getDimensionPixelSize(R.styleable.BubbleTextView_iconSizeOverride,
                 defaultIconSize);
         a.recycle();
+
+        mRunningAppIndicatorSize = new Size(
+                getResources().getDimensionPixelSize(R.dimen.taskbar_running_app_indicator_width),
+                getResources().getDimensionPixelSize(R.dimen.taskbar_running_app_indicator_height));
+        mMinimizedAppIndicatorSize = new Size(
+                getResources().getDimensionPixelSize(R.dimen.taskbar_minimized_app_indicator_width),
+                getResources().getDimensionPixelSize(
+                        R.dimen.taskbar_minimized_app_indicator_height));
+        mRunningAppIndicatorTopMargin =
+                getResources().getDimensionPixelSize(
+                        R.dimen.taskbar_running_app_indicator_top_margin);
+        mMinimizedAppIndicatorTopMargin =
+                getResources().getDimensionPixelSize(
+                        R.dimen.taskbar_minimized_app_indicator_top_margin);
+        mRunningAppIndicatorPaint = new Paint();
+        mRunningAppIndicatorPaint.setColor(getResources().getColor(
+                R.color.taskbar_running_app_indicator_color, context.getTheme()));
 
         mLongPressHelper = new CheckLongPressHelper(this);
 
@@ -395,6 +430,12 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
         setDownloadStateContentDescription(info, info.getProgressLevel());
     }
 
+    /** Updates whether the app this view represents is currently running. */
+    @UiThread
+    public void updateRunningState(RunningAppState runningAppState) {
+        mRunningAppState = runningAppState;
+    }
+
     protected void setItemInfo(ItemInfoWithIcon itemInfo) {
         setTag(itemInfo);
     }
@@ -436,8 +477,7 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
     }
 
     @UiThread
-    @VisibleForTesting
-    public void applyLabel(ItemInfoWithIcon info) {
+    public void applyLabel(ItemInfo info) {
         CharSequence label = info.title;
         if (label != null) {
             mLastOriginalText = label;
@@ -622,6 +662,7 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
     public void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         drawDotIfNecessary(canvas);
+        drawRunningAppIndicatorIfNecessary(canvas);
     }
 
     /**
@@ -633,13 +674,31 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
         if (!mForceHideDot && (hasDot() || mDotParams.scale > 0)) {
             getIconBounds(mDotParams.iconBounds);
             Utilities.scaleRectAboutCenter(mDotParams.iconBounds,
-                    IconShape.getNormalizationScale());
+                    IconShape.INSTANCE.get(getContext()).getNormalizationScale());
             final int scrollX = getScrollX();
             final int scrollY = getScrollY();
             canvas.translate(scrollX, scrollY);
             mDotRenderer.draw(canvas, mDotParams);
             canvas.translate(-scrollX, -scrollY);
         }
+    }
+
+    /** Draws a line under the app icon if this is representing a running app in Desktop Mode. */
+    protected void drawRunningAppIndicatorIfNecessary(Canvas canvas) {
+        if (mRunningAppState == RunningAppState.NOT_RUNNING || mDisplay != DISPLAY_TASKBAR) {
+            return;
+        }
+        getIconBounds(mRunningAppIconBounds);
+        // TODO(b/333872717): update color, shape, and size of indicator
+        boolean isMinimized = mRunningAppState == RunningAppState.MINIMIZED;
+        int indicatorTop =
+                mRunningAppIconBounds.bottom + (isMinimized ? mMinimizedAppIndicatorTopMargin
+                        : mRunningAppIndicatorTopMargin);
+        final Size indicatorSize =
+                isMinimized ? mMinimizedAppIndicatorSize : mRunningAppIndicatorSize;
+        canvas.drawRect(mRunningAppIconBounds.centerX() - indicatorSize.getWidth() / 2,
+                indicatorTop, mRunningAppIconBounds.centerX() + indicatorSize.getWidth() / 2,
+                indicatorTop + indicatorSize.getHeight(), mRunningAppIndicatorPaint);
     }
 
     @Override
@@ -913,7 +972,8 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
     /** Applies the given progress level to the this icon's progress bar. */
     @Nullable
     public PreloadIconDrawable applyProgressLevel() {
-        if (!(getTag() instanceof ItemInfoWithIcon)) {
+        if (!(getTag() instanceof ItemInfoWithIcon)
+                || ((ItemInfoWithIcon) getTag()).isInactiveArchive()) {
             return null;
         }
 
@@ -969,6 +1029,7 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
     public boolean isIconDisabled(ItemInfoWithIcon info) {
         return info.isDisabled() || info.isPendingDownload();
     }
+
 
     public void applyDotState(ItemInfo itemInfo, boolean animate) {
         if (mIcon instanceof FastBitmapDrawable) {
@@ -1229,5 +1290,14 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
      */
     public boolean canShowLongPressPopup() {
         return getTag() instanceof ItemInfo && ShortcutUtil.supportsShortcuts((ItemInfo) getTag());
+    }
+
+    /** Returns the package name of the app this icon represents. */
+    public String getTargetPackageName() {
+        Object tag = getTag();
+        if (tag instanceof ItemInfo itemInfo) {
+            return itemInfo.getTargetPackage();
+        }
+        return null;
     }
 }

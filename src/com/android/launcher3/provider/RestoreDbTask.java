@@ -18,6 +18,7 @@ package com.android.launcher3.provider;
 
 import static android.os.Process.myUserHandle;
 
+import static com.android.launcher3.BuildConfig.WIDGETS_ENABLED;
 import static com.android.launcher3.Flags.enableLauncherBrMetricsFixed;
 import static com.android.launcher3.InvariantDeviceProfile.TYPE_MULTI_DISPLAY;
 import static com.android.launcher3.LauncherPrefs.APP_WIDGET_IDS;
@@ -50,8 +51,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 import androidx.annotation.WorkerThread;
 
+import com.android.launcher3.Flags;
 import com.android.launcher3.InvariantDeviceProfile;
 import com.android.launcher3.LauncherAppState;
+import com.android.launcher3.LauncherFiles;
 import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.LauncherSettings;
 import com.android.launcher3.LauncherSettings.Favorites;
@@ -62,20 +65,21 @@ import com.android.launcher3.logging.FileLog;
 import com.android.launcher3.model.DeviceGridState;
 import com.android.launcher3.model.LoaderTask;
 import com.android.launcher3.model.ModelDbController;
-import com.android.launcher3.model.WidgetsModel;
 import com.android.launcher3.model.data.AppInfo;
 import com.android.launcher3.model.data.LauncherAppWidgetInfo;
 import com.android.launcher3.model.data.WorkspaceItemInfo;
 import com.android.launcher3.pm.UserCache;
 import com.android.launcher3.provider.LauncherDbUtils.SQLiteTransaction;
-import com.android.launcher3.uioverrides.ApiWrapper;
+import com.android.launcher3.util.ApiWrapper;
 import com.android.launcher3.util.ContentWriter;
 import com.android.launcher3.util.IntArray;
 import com.android.launcher3.util.LogConfig;
 
+import java.io.File;
 import java.io.InvalidObjectException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -121,7 +125,66 @@ public class RestoreDbTask {
         // executed again.
         LauncherPrefs.get(context).removeSync(RESTORE_DEVICE);
 
-        idp.reinitializeAfterRestore(context);
+        if (Flags.enableNarrowGridRestore()) {
+            String oldPhoneFileName = idp.dbFile;
+            List<String> previousDbs = existingDbs();
+            removeOldDBs(context, oldPhoneFileName);
+            // The idp before this contains data about the old phone, after this it becomes the idp
+            // of the current phone.
+            idp.reset(context);
+            trySettingPreviousGidAsCurrent(context, idp, oldPhoneFileName, previousDbs);
+        } else {
+            idp.reinitializeAfterRestore(context);
+        }
+    }
+
+
+    /**
+     * Try setting the gird used in the previous phone to the new one. If the current device doesn't
+     * support the previous grid option it will not be set.
+     */
+    private static void trySettingPreviousGidAsCurrent(Context context, InvariantDeviceProfile idp,
+            String oldPhoneDbFileName, List<String> previousDbs) {
+        InvariantDeviceProfile.GridOption oldPhoneGridOption = idp.getGridOptionFromFileName(
+                context, oldPhoneDbFileName);
+        // The grid option could be null if current phone doesn't support the previous db.
+        if (oldPhoneGridOption != null) {
+            /* If the user only used the default db on the previous phone and the new default db is
+             * bigger than or equal to the previous one, then keep the new default db */
+            if (previousDbs.size() == 1 && oldPhoneGridOption.numColumns <= idp.numColumns
+                    && oldPhoneGridOption.numRows <= idp.numRows) {
+                /* Keep the user in default grid */
+                return;
+            }
+            /*
+             * Here we are setting the previous db as the current one.
+             */
+            idp.setCurrentGrid(context, oldPhoneGridOption.name);
+        }
+    }
+
+    /**
+     * Returns a list of paths of the existing launcher dbs.
+     */
+    private static List<String> existingDbs() {
+        // At this point idp.dbFile contains the name of the dbFile from the previous phone
+        return LauncherFiles.GRID_DB_FILES.stream()
+                .filter(dbName -> new File(dbName).exists())
+                .toList();
+    }
+
+    /**
+     * Only keep the last database used on the previous device.
+     */
+    private static void removeOldDBs(Context context, String oldPhoneDbFileName) {
+        // At this point idp.dbFile contains the name of the dbFile from the previous phone
+        LauncherFiles.GRID_DB_FILES.stream()
+                .filter(dbName -> !dbName.equals(oldPhoneDbFileName))
+                .forEach(dbName -> {
+                    if (context.getDatabasePath(dbName).delete()) {
+                        FileLog.d(TAG, "Removed old grid db file: " + dbName);
+                    }
+                });
     }
 
     private static boolean performRestore(Context context, ModelDbController controller) {
@@ -355,9 +418,7 @@ public class RestoreDbTask {
         DeviceGridState deviceGridState = new DeviceGridState(context);
         FileLog.d(TAG, "restore initiated from backup: DeviceGridState=" + deviceGridState);
         LauncherPrefs.get(context).putSync(RESTORE_DEVICE.to(deviceGridState.getDeviceType()));
-        if (enableLauncherBrMetricsFixed()) {
-            LauncherPrefs.get(context).putSync(IS_FIRST_LOAD_AFTER_RESTORE.to(true));
-        }
+        LauncherPrefs.get(context).putSync(IS_FIRST_LOAD_AFTER_RESTORE.to(true));
     }
 
     @WorkerThread
@@ -385,7 +446,7 @@ public class RestoreDbTask {
     private void restoreAppWidgetIds(Context context, ModelDbController controller,
             LauncherRestoreEventLogger launcherRestoreEventLogger, int[] oldWidgetIds,
             int[] newWidgetIds, @NonNull AppWidgetHost host) {
-        if (WidgetsModel.GO_DISABLE_WIDGETS) {
+        if (!WIDGETS_ENABLED) {
             FileLog.e(TAG, "Skipping widget ID remap as widgets not supported");
             host.deleteHost();
             launcherRestoreEventLogger.logFavoritesItemsRestoreFailed(Favorites.ITEM_TYPE_APPWIDGET,
@@ -413,7 +474,7 @@ public class RestoreDbTask {
         logDatabaseWidgetInfo(controller);
 
         for (int i = 0; i < oldWidgetIds.length; i++) {
-            FileLog.i(TAG, "Widget state restore id " + oldWidgetIds[i] + " => " + newWidgetIds[i]);
+            FileLog.i(TAG, "migrating appWidgetId: " + oldWidgetIds[i] + " => " + newWidgetIds[i]);
 
             final AppWidgetProviderInfo provider = widgets.getAppWidgetInfo(newWidgetIds[i]);
             final int state;
@@ -463,10 +524,7 @@ public class RestoreDbTask {
         }
 
         logFavoritesTable(controller.getDb(), "launcher db after remap widget ids", null, null);
-        LauncherAppState app = LauncherAppState.getInstanceNoCreate();
-        if (app != null) {
-            app.getModel().forceReload();
-        }
+        LauncherAppState.INSTANCE.executeIfCreated(app -> app.getModel().forceReload());
     }
 
     private static void logDatabaseWidgetInfo(ModelDbController controller) {
@@ -514,9 +572,8 @@ public class RestoreDbTask {
 
     protected static void maybeOverrideShortcuts(Context context, ModelDbController controller,
             SQLiteDatabase db, long currentUser) {
-        Map<String, LauncherActivityInfo> activityOverrides = ApiWrapper.getActivityOverrides(
-                context);
-
+        Map<String, LauncherActivityInfo> activityOverrides =
+                ApiWrapper.INSTANCE.get(context).getActivityOverrides();
         if (activityOverrides == null || activityOverrides.isEmpty()) {
             return;
         }

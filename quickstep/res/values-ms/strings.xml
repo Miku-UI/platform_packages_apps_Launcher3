@@ -21,6 +21,7 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="recent_task_option_pin" msgid="7929860679018978258">"Semat"</string>
     <string name="recent_task_option_freeform" msgid="48863056265284071">"Bentuk bebas"</string>
+    <string name="recent_task_option_desktop" msgid="8280879717125435668">"Desktop"</string>
     <string name="recents_empty_message" msgid="7040467240571714191">"Tiada item terbaharu"</string>
     <string name="accessibility_app_usage_settings" msgid="6312864233673544149">"Tetapan penggunaan apl"</string>
     <string name="recents_clear_all" msgid="5328176793634888831">"Kosongkan semua"</string>
@@ -95,6 +96,7 @@
     <string name="action_share" msgid="2648470652637092375">"Kongsi"</string>
     <string name="action_screenshot" msgid="8171125848358142917">"Tangkapan skrin"</string>
     <string name="action_split" msgid="2098009717623550676">"Pisah"</string>
+    <string name="action_save_app_pair" msgid="5974823919237645229">"Simpan gandingan apl"</string>
     <string name="toast_split_select_app" msgid="8464310533320556058">"Ketik apl lain untuk menggunakan skrin pisah"</string>
     <string name="toast_contextual_split_select_app" msgid="433510957123687090">"Pilih apl lain untuk menggunakan skrin pisah"</string>
     <string name="toast_split_select_app_cancel" msgid="1532690483356445639"><b>"Batal"</b></string>
@@ -115,6 +117,8 @@
     <string name="taskbar_edu_features" msgid="3320337287472848162">"Lakukan lebih banyak perkara dengan Bar Tugas"</string>
     <string name="taskbar_edu_pinning_title" msgid="210102174154211712">"Sentiasa paparkan Bar Tugas"</string>
     <string name="taskbar_edu_pinning_standalone" msgid="2636919474366410467">"Untuk sentiasa memaparkan Bar Tugas pada bahagian bawah skrin, sentuh &amp; tahan pembahagi"</string>
+    <string name="taskbar_search_edu_title" msgid="5569194922234364530">"Sentuh &amp; tahan kekunci tindakan untuk mencari kandungan yang dipaparkan pada skrin anda"</string>
+    <string name="taskbar_edu_search_disclosure" msgid="8734536088447779686">"Produk ini menggunakan bahagian yang dipilih pada skrin anda untuk membuat carian. <xliff:g id="BEGIN_PRIVACY_LINK">&lt;a href="%1$s"&gt;</xliff:g>Dasar Privasi<xliff:g id="END_PRIVACY_LINK">&lt;/a&gt;</xliff:g> dan <xliff:g id="BEGIN_TOS_LINK">&lt;a href="%2$s"&gt;</xliff:g>Syarat Perkhidmatan<xliff:g id="END_TOS_LINK">&lt;/a&gt;</xliff:g> Google digunakan."</string>
     <string name="taskbar_edu_close" msgid="887022990168191073">"Tutup"</string>
     <string name="taskbar_edu_done" msgid="6880178093977704569">"Selesai"</string>
     <string name="taskbar_button_home" msgid="2151398979630664652">"Laman Utama"</string>
@@ -134,7 +138,10 @@
     <string name="move_drop_target_top_or_left" msgid="2988702185049595807">"Alihkan ke atas/kiri"</string>
     <string name="move_drop_target_bottom_or_right" msgid="5431393418797620162">"Alihkan ke bawah/kanan"</string>
     <string name="quick_switch_overflow" msgid="6935266023013283353">"{count,plural, =1{Tunjukkan # lagi apl.}other{Tunjukkan # lagi apl.}}"</string>
+    <string name="quick_switch_desktop" msgid="4834587349322698616">"{count,plural, =1{Tunjukkan # apl desktop.}other{Tunjukkan # apl desktop.}}"</string>
     <string name="quick_switch_split_task" msgid="5598194724255333896">"<xliff:g id="APP_NAME_1">%1$s</xliff:g> dan <xliff:g id="APP_NAME_2">%2$s</xliff:g>"</string>
-    <string name="desktop_select_app_toast" msgid="2306057322833956910">"Menambahkan apl pada Desktop"</string>
-    <string name="desktop_button_close_app_toast" msgid="5283096349579408560">"Batal"</string>
+    <string name="bubble_bar_bubble_fallback_description" msgid="7811684548953452009">"Gelembung"</string>
+    <string name="bubble_bar_overflow_description" msgid="8617628132733151708">"Limpahan"</string>
+    <string name="bubble_bar_bubble_description" msgid="1882466152448446446">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> daripada <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
+    <string name="bubble_bar_description_multiple_bubbles" msgid="3922207715357143648">"<xliff:g id="BUBBLE_BAR_BUBBLE_DESCRIPTION">%1$s</xliff:g> dan <xliff:g id="BUBBLE_COUNT">%2$d</xliff:g> lagi"</string>
 </resources>

@@ -485,7 +485,10 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
         super.onVisibilityAggregated(isVisible);
     }
 
-    protected boolean isPageInTransition() {
+    /**
+     * Returns true if the page is in the middle of transition to another page
+     */
+    public boolean isPageInTransition() {
         return mIsPageInTransition;
     }
 
@@ -785,7 +788,7 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
         if (mScroller.isFinished() && pageScrollChanged) {
             // TODO(b/246283207): Remove logging once root cause of flake detected.
             if (Utilities.isRunningInTestHarness() && !(this instanceof Workspace)) {
-                Log.d("b/246283207", this.getClass().getSimpleName() + "#onLayout() -> "
+                Log.d("b/246283207", TAG + "#onLayout() -> "
                         + "if(mScroller.isFinished() && pageScrollChanged) -> getNextPage(): "
                         + getNextPage() + ", getScrollForPage(getNextPage()): "
                         + getScrollForPage(getNextPage()));
@@ -826,7 +829,9 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
                 // or right edge for RTL.
                 final int pageScroll =
                         mIsRtl ? childPrimaryEnd - scrollOffsetEnd : childStart - scrollOffsetStart;
-                if (outPageScrolls[i] != pageScroll) {
+                // If there's more than one panel, only update scroll on leftmost panel.
+                if (outPageScrolls[i] != pageScroll
+                        && (panelCount <= 1 || i == getLeftmostVisiblePageForIndex(i))) {
                     pageScrollChanged = true;
                     outPageScrolls[i] = pageScroll;
                 }
@@ -842,7 +847,7 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
 
         if (panelCount > 1) {
             for (int i = 0; i < childCount; i++) {
-                // In case we have multiple panels, always use left most panel's page scroll for all
+                // In case we have multiple panels, always use leftmost panel's page scroll for all
                 // panels on the screen.
                 int adjustedScroll = outPageScrolls[getLeftmostVisiblePageForIndex(i)];
                 if (outPageScrolls[i] != adjustedScroll) {

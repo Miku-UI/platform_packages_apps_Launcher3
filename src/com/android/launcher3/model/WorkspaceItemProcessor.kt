@@ -26,19 +26,25 @@ import android.graphics.Point
 import android.text.TextUtils
 import android.util.Log
 import android.util.LongSparseArray
+import com.android.launcher3.Flags
 import com.android.launcher3.InvariantDeviceProfile
 import com.android.launcher3.LauncherAppState
 import com.android.launcher3.LauncherSettings.Favorites
 import com.android.launcher3.Utilities
 import com.android.launcher3.backuprestore.LauncherRestoreEventLogger.RestoreError
+import com.android.launcher3.config.FeatureFlags
 import com.android.launcher3.logging.FileLog
+import com.android.launcher3.model.data.AppInfo
+import com.android.launcher3.model.data.AppPairInfo
+import com.android.launcher3.model.data.FolderInfo
 import com.android.launcher3.model.data.IconRequestInfo
 import com.android.launcher3.model.data.ItemInfoWithIcon
 import com.android.launcher3.model.data.LauncherAppWidgetInfo
 import com.android.launcher3.model.data.WorkspaceItemInfo
 import com.android.launcher3.pm.PackageInstallInfo
+import com.android.launcher3.pm.UserCache
 import com.android.launcher3.shortcuts.ShortcutKey
-import com.android.launcher3.uioverrides.ApiWrapper
+import com.android.launcher3.util.ApiWrapper
 import com.android.launcher3.util.ComponentKey
 import com.android.launcher3.util.PackageManagerHelper
 import com.android.launcher3.util.PackageUserKey
@@ -56,6 +62,7 @@ import com.android.launcher3.widget.util.WidgetSizes
 class WorkspaceItemProcessor(
     private val c: LoaderCursor,
     private val memoryLogger: LoaderMemoryLogger?,
+    private val userCache: UserCache,
     private val userManagerState: UserManagerState,
     private val launcherApps: LauncherApps,
     private val pendingPackages: MutableSet<PackageUserKey>,
@@ -176,6 +183,9 @@ class WorkspaceItemProcessor(
                     return
                 }
             }
+        }
+        if (intent.`package` == null) {
+            intent.`package` = targetPkg
         }
         // else if cn == null => can't infer much, leave it
         // else if !validPkg => could be restored icon or missing sd-card
@@ -322,17 +332,17 @@ class WorkspaceItemProcessor(
             }
             val activityInfo = c.launcherActivityInfo
             if (activityInfo != null) {
-                if (ApiWrapper.isNonResizeableActivity(activityInfo)) {
-                    info.status = info.status or WorkspaceItemInfo.FLAG_NON_RESIZEABLE
-                }
-                info.setProgressLevel(
-                    PackageManagerHelper.getLoadingProgress(activityInfo),
-                    PackageInstallInfo.STATUS_INSTALLED_DOWNLOADING
+                AppInfo.updateRuntimeFlagsForActivityTarget(
+                    info,
+                    activityInfo,
+                    userCache.getUserInfo(c.user),
+                    ApiWrapper.INSTANCE[app.context],
+                    pmHelper
                 )
             }
             if (
                 (c.restoreFlag != 0 ||
-                    Utilities.enableSupportForArchiving() &&
+                    Flags.enableSupportForArchiving() &&
                         activityInfo != null &&
                         activityInfo.applicationInfo.isArchived) && !TextUtils.isEmpty(targetPkg)
             ) {
@@ -344,7 +354,7 @@ class WorkspaceItemProcessor(
                             ItemInfoWithIcon.FLAG_INSTALL_SESSION_ACTIVE.inv()
                 } else if (
                     activityInfo == null ||
-                        (Utilities.enableSupportForArchiving() &&
+                        (Flags.enableSupportForArchiving() &&
                             activityInfo.applicationInfo.isArchived)
                 ) {
                     // For archived apps, include progress info in case there is
@@ -360,25 +370,46 @@ class WorkspaceItemProcessor(
     }
 
     /**
-     * Loads the folder information from the database and formats it into a FolderInfo. Some of the
-     * processing for folder content items is done in LoaderTask after all the items in the
-     * workspace have been loaded. The loaded FolderInfos are stored in the BgDataModel.
+     * Loads CollectionInfo information from the database and formats it. This function runs while
+     * LoaderTask is still active; some of the processing for folder content items is done after all
+     * the items in the workspace have been loaded. The loaded and formatted CollectionInfo is then
+     * stored in the BgDataModel.
      */
     private fun processFolderOrAppPair() {
-        val folderInfo =
-            bgDataModel.findOrMakeFolder(c.id).apply {
-                c.applyCommonProperties(this)
-                itemType = c.itemType
-                // Do not trim the folder label, as is was set by the user.
-                title = c.getString(c.mTitleIndex)
-                spanX = 1
-                spanY = 1
-                options = c.options
+        var collection = bgDataModel.findOrMakeFolder(c.id)
+        // If we generated a placeholder Folder before this point, it may need to be replaced with
+        // an app pair.
+        if (c.itemType == Favorites.ITEM_TYPE_APP_PAIR && collection is FolderInfo) {
+            if (!FeatureFlags.enableAppPairs()) {
+                // If app pairs are not enabled, stop loading.
+                Log.e(TAG, "app pairs flag is off, did not load app pair")
+                return
             }
 
-        // no special handling required for restored folders
+            val folderInfo: FolderInfo = collection
+            val newAppPair = AppPairInfo()
+            // Move the placeholder's contents over to the new app pair.
+            folderInfo.getContents().forEach(newAppPair::add)
+            collection = newAppPair
+            // Remove the placeholder and add the app pair into the data model.
+            bgDataModel.collections.remove(c.id)
+            bgDataModel.collections.put(c.id, collection)
+        }
+
+        c.applyCommonProperties(collection)
+        // Do not trim the folder label, as is was set by the user.
+        collection.title = c.getString(c.mTitleIndex)
+        collection.spanX = 1
+        collection.spanY = 1
+        if (collection is FolderInfo) {
+            collection.options = c.options
+        } else {
+            // An app pair may be inside another folder, so it needs to preserve rank information.
+            collection.rank = c.rank
+        }
+
         c.markRestored()
-        c.checkAndAddItem(folderInfo, bgDataModel, memoryLogger)
+        c.checkAndAddItem(collection, bgDataModel, memoryLogger)
     }
 
     /**
@@ -410,14 +441,21 @@ class WorkspaceItemProcessor(
         appWidgetInfo.restoreStatus = c.restoreFlag
         if (appWidgetInfo.spanX <= 0 || appWidgetInfo.spanY <= 0) {
             c.markDeleted(
-                "Widget has invalid size: ${appWidgetInfo.spanX}x${appWidgetInfo.spanY}",
+                "processWidget: Widget has invalid size: ${appWidgetInfo.spanX}x${appWidgetInfo.spanY}" +
+                    ", id=${c.id}," +
+                    ", appWidgetId=${c.appWidgetId}," +
+                    ", component=${component}",
                 RestoreError.INVALID_LOCATION
             )
             return
         }
         if (!c.isOnWorkspaceOrHotseat) {
             c.markDeleted(
-                "Widget found where container != CONTAINER_DESKTOP nor CONTAINER_HOTSEAT - ignoring!",
+                "processWidget: invalid Widget container != CONTAINER_DESKTOP nor CONTAINER_HOTSEAT." +
+                    " id=${c.id}," +
+                    ", appWidgetId=${c.appWidgetId}," +
+                    ", component=${component}," +
+                    ", container=${c.container}",
                 RestoreError.INVALID_LOCATION
             )
             return
@@ -428,7 +466,12 @@ class WorkspaceItemProcessor(
         val inflationResult = widgetInflater.inflateAppWidget(appWidgetInfo)
         var shouldUpdate = inflationResult.isUpdate
         val lapi = inflationResult.widgetInfo
-
+        FileLog.d(
+            TAG,
+            "processWidget: id=${c.id}" +
+                ", appWidgetId=${c.appWidgetId}" +
+                ", inflationResult=$inflationResult"
+        )
         when (inflationResult.type) {
             WidgetInflater.TYPE_DELETE -> {
                 c.markDeleted(inflationResult.reason, inflationResult.restoreErrorType)
@@ -443,12 +486,16 @@ class WorkspaceItemProcessor(
                         !isSafeMode &&
                         (si == null) &&
                         (lapi == null) &&
-                        !(Utilities.enableSupportForArchiving() &&
+                        !(Flags.enableSupportForArchiving() &&
                             pmHelper.isAppArchived(component.packageName))
                 ) {
                     // Restore never started
                     c.markDeleted(
-                        "Unrestored widget removed: $component",
+                        "processWidget: Unrestored Pending widget removed:" +
+                            " id=${c.id}" +
+                            ", appWidgetId=${c.appWidgetId}" +
+                            ", component=${component}" +
+                            ", restoreFlag:=${c.restoreFlag}",
                         RestoreError.APP_NOT_INSTALLED
                     )
                     return
@@ -491,7 +538,10 @@ class WorkspaceItemProcessor(
             if (appWidgetInfo.spanX < lapi.minSpanX || appWidgetInfo.spanY < lapi.minSpanY) {
                 FileLog.d(
                     TAG,
-                    "Widget ${lapi.component} minSizes not meet: span=${appWidgetInfo.spanX}x${appWidgetInfo.spanY} minSpan=${lapi.minSpanX}x${lapi.minSpanY}"
+                    " processWidget: Widget ${lapi.component} minSizes not met: span=${appWidgetInfo.spanX}x${appWidgetInfo.spanY} minSpan=${lapi.minSpanX}x${lapi.minSpanY}," +
+                        " id: ${c.id}," +
+                        " appWidgetId: ${c.appWidgetId}," +
+                        " component=${component}"
                 )
                 logWidgetInfo(app.invariantDeviceProfile, lapi)
             }

@@ -71,7 +71,8 @@ DeviceProfile:
 	allAppsPadding.right: 0.0px (0.0dp)
 	allAppsLeftRightMargin: 0.0px (0.0dp)
 	hotseatBarSizePx: 294.0px (112.0dp)
-	inv.hotseatColumnSpan: 5
+	mHotseatColumnSpan: 5
+	mHotseatWidthPx: 0.0px (0.0dp)
 	hotseatCellHeightPx: 166.0px (63.238094dp)
 	hotseatBarBottomSpacePx: 147.0px (56.0dp)
 	mHotseatBarEdgePaddingPx: 0.0px (0.0dp)
@@ -123,7 +124,7 @@ DeviceProfile:
 	dropTargetBarBottomMarginPx: 42.0px (16.0dp)
 	getCellLayoutSpringLoadShrunkTop(): 391.0px (148.95238dp)
 	getCellLayoutSpringLoadShrunkBottom(): 1906.0px (726.0952dp)
-	workspaceSpringLoadedMinNextPageVisiblePx: 63.0px (24.0dp)
-	getWorkspaceSpringLoadScale(): 0.77572966px (0.29551607dp)
+	workspaceSpringLoadedMinNextPageVisiblePx: 126.0px (48.0dp)
+	getWorkspaceSpringLoadScale(): 0.76666665px (0.29206347dp)
 	getCellLayoutHeight(): 1953.0px (744.0dp)
 	getCellLayoutWidth(): 1080.0px (411.42856dp)
