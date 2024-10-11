@@ -390,7 +390,7 @@ public class DeviceProfile {
         }
 
         boolean allowPhone = LauncherPrefs.getPrefs(context).getBoolean(KEY_PHONE_TASKBAR, true);
-        isTaskbarPresent = (isTablet || allowPhone) && ApiWrapper.TASKBAR_DRAWN_IN_PROCESS;
+        isTaskbarPresent = (isTablet || allowPhone) && WindowManagerProxy.INSTANCE.get(context).isTaskbarDrawnInProcess();
 
         this.isTransientTaskbar = isTransientTaskbar;
         int transientTaskbarIconSize = pxFromDp(inv.transientTaskbarIconSize[mTypeIndex], mMetrics);

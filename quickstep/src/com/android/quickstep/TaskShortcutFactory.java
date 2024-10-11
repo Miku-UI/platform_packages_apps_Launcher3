@@ -509,27 +509,26 @@ public interface TaskShortcutFactory {
 
     TaskShortcutFactory KILL_APP = new TaskShortcutFactory() {
         @Override
-        public List<SystemShortcut> getShortcuts(BaseDraggingActivity activity,
-                TaskIdAttributeContainer taskContainer) {
-            String packageName = taskContainer.getTaskView()
-                    .getItemInfo().getTargetComponent().getPackageName();
+        public List<SystemShortcut> getShortcuts(RecentsViewContainer container,
+                TaskContainer taskContainer) {
+            String packageName = taskContainer.getTask().key.getPackageName();
             return createSingletonShortcutList(new KillSystemShortcut(
-                    activity, taskContainer, packageName));
+                    container, taskContainer, packageName));
         }
     };
 
     class KillSystemShortcut extends SystemShortcut {
         private static final String TAG = "KillSystemShortcut";
-        private final TaskView mTaskView;
-        private final BaseDraggingActivity mActivity;
+        private final TaskContainer mTaskContainer;
+        private final RecentsViewContainer mContainer;
         private final String mPackageName;
 
-        public KillSystemShortcut(BaseDraggingActivity activity,
-                TaskIdAttributeContainer taskContainer, String packageName) {
+        public KillSystemShortcut(RecentsViewContainer container,
+                                  TaskContainer taskContainer, String packageName) {
             super(R.drawable.ic_kill_app, R.string.recent_task_option_kill_app,
-                    activity, taskContainer.getItemInfo(), taskContainer.getTaskView());
-            mTaskView = taskContainer.getTaskView();
-            mActivity = activity;
+                    container, taskContainer.getItemInfo(), taskContainer.getTaskView());
+            mTaskContainer = taskContainer;
+            mContainer = container;
             mPackageName = packageName;
         }
 
@@ -537,19 +536,19 @@ public interface TaskShortcutFactory {
         public void onClick(View view) {
             if (mPackageName != null) {
                 IActivityManager iam = ActivityManagerNative.getDefault();
-                Task task = mTaskView.getTask();
+                Task task = mTaskContainer.getTask();
                 if (task != null) {
                     try {
                         iam.forceStopPackage(mPackageName, UserHandle.USER_CURRENT);
-                        Toast appKilled = Toast.makeText(mActivity, R.string.recents_app_killed,
+                        Toast appKilled = Toast.makeText(mContainer.asContext(), R.string.recents_app_killed,
                             Toast.LENGTH_SHORT);
                         appKilled.show();
-                        ((RecentsView)mActivity.getOverviewPanel())
-                              .dismissTask(mTaskView, true /* animate */, true /* removeTask */);
+                        ((RecentsView)mContainer.getOverviewPanel())
+                              .dismissTask(mTaskContainer.getTaskView(), true /* animate */, true /* removeTask */);
                     } catch (RemoteException e) { }
                 }
             }
-            dismissTaskMenuView(mActivity);
+            dismissTaskMenuView();
         }
     }
 }
