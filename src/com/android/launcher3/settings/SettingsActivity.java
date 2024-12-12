@@ -44,11 +44,13 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceFragmentCompat.OnPreferenceStartFragmentCallback;
 import androidx.preference.PreferenceFragmentCompat.OnPreferenceStartScreenCallback;
+import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceGroup.PreferencePositionCallback;
 import androidx.preference.PreferenceScreen;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.launcher3.BuildConfig;
+import com.android.launcher3.Flags;
 import com.android.launcher3.LauncherFiles;
 import com.android.launcher3.R;
 import com.android.launcher3.lineage.LineageUtils;
@@ -169,6 +171,7 @@ public class SettingsActivity extends FragmentActivity
         private boolean mRestartOnResume = false;
 
         private String mHighLightKey;
+
         private boolean mPreferenceHighlighted = false;
 
         @Override
@@ -202,9 +205,60 @@ public class SettingsActivity extends FragmentActivity
                 }
             }
 
+            // If the target preference is not in the current preference screen, find the parent
+            // preference screen that contains the target preference and set it as the preference
+            // screen.
+            if (Flags.navigateToChildPreference()
+                    && mHighLightKey != null
+                    && !isKeyInPreferenceGroup(mHighLightKey, screen)) {
+                final PreferenceScreen parentPreferenceScreen =
+                        findParentPreference(screen, mHighLightKey);
+                if (parentPreferenceScreen != null && getActivity() != null) {
+                    if (!TextUtils.isEmpty(parentPreferenceScreen.getTitle())) {
+                        getActivity().setTitle(parentPreferenceScreen.getTitle());
+                    }
+                    setPreferenceScreen(parentPreferenceScreen);
+                    return;
+                }
+            }
+
             if (getActivity() != null && !TextUtils.isEmpty(getPreferenceScreen().getTitle())) {
                 getActivity().setTitle(getPreferenceScreen().getTitle());
             }
+        }
+
+        private boolean isKeyInPreferenceGroup(String targetKey, PreferenceGroup parent) {
+            for (int i = 0; i < parent.getPreferenceCount(); i++) {
+                Preference pref = parent.getPreference(i);
+                if (pref.getKey() != null && pref.getKey().equals(targetKey)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Finds the parent preference screen for the given target key.
+         *
+         * @param parent the parent preference screen
+         * @param targetKey the key of the preference to find
+         * @return the parent preference screen that contains the target preference
+         */
+        @Nullable
+        private PreferenceScreen findParentPreference(PreferenceScreen parent, String targetKey) {
+            for (int i = 0; i < parent.getPreferenceCount(); i++) {
+                Preference pref = parent.getPreference(i);
+                if (pref instanceof PreferenceScreen) {
+                    PreferenceScreen foundKey = findParentPreference((PreferenceScreen) pref,
+                            targetKey);
+                    if (foundKey != null) {
+                        return foundKey;
+                    }
+                } else if (pref.getKey() != null && pref.getKey().equals(targetKey)) {
+                    return parent;
+                }
+            }
+            return null;
         }
 
         @Override
