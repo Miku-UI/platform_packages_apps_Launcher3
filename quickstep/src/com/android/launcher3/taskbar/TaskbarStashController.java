@@ -28,6 +28,7 @@ import static com.android.launcher3.config.FeatureFlags.ENABLE_TASKBAR_NAVBAR_UN
 import static com.android.launcher3.config.FeatureFlags.enableTaskbarPinning;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_TRANSIENT_TASKBAR_HIDE;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_TRANSIENT_TASKBAR_SHOW;
+import static com.android.launcher3.taskbar.TaskbarManager.NAVIGATION_BAR_HINT;
 import static com.android.launcher3.util.Executors.UI_HELPER_EXECUTOR;
 import static com.android.launcher3.util.FlagDebugUtils.appendFlag;
 import static com.android.launcher3.util.FlagDebugUtils.formatFlagChange;
@@ -69,6 +70,7 @@ import com.android.launcher3.anim.AnimationSuccessListener;
 import com.android.launcher3.anim.AnimatorListeners;
 import com.android.launcher3.util.DisplayController;
 import com.android.launcher3.util.MultiPropertyFactory.MultiProperty;
+import com.android.launcher3.util.SettingsCache;
 import com.android.quickstep.SystemUiProxy;
 import com.android.quickstep.util.SystemUiFlagUtils;
 
@@ -302,11 +304,14 @@ public class TaskbarStashController implements TaskbarControllers.LoggableTaskba
         if (mActivity.isPhoneMode()) {
             mUnstashedHeight = mActivity.getResources().getDimensionPixelSize(
                     R.dimen.taskbar_phone_size);
-            mStashedHeight = mActivity.getResources().getDimensionPixelSize(
-                    R.dimen.taskbar_stashed_size);
+            mStashedHeight = SettingsCache.INSTANCE.get(mActivity).getValue(NAVIGATION_BAR_HINT, 1)
+                    ? mActivity.getResources().getDimensionPixelSize(R.dimen.taskbar_stashed_size)
+                    : 0;
         } else {
             mUnstashedHeight = mActivity.getDeviceProfile().taskbarHeight;
-            mStashedHeight = mActivity.getDeviceProfile().stashedTaskbarHeight;
+            mStashedHeight = SettingsCache.INSTANCE.get(mActivity).getValue(NAVIGATION_BAR_HINT, 1)
+                    ? mActivity.getDeviceProfile().stashedTaskbarHeight
+                    : 0;
         }
     }
 
