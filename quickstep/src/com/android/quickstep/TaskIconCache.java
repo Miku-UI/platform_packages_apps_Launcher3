@@ -118,6 +118,10 @@ public class TaskIconCache implements TaskIconDataSource, DisplayInfoChangeListe
                 () -> getCacheEntry(task),
                 MAIN_EXECUTOR,
                 result -> {
+                    task.icon = result.icon;
+                    task.titleDescription = result.contentDescription;
+                    task.title = result.title;
+
                     callback.onTaskIconReceived(
                             result.icon,
                             result.contentDescription,
@@ -228,7 +232,7 @@ public class TaskIconCache implements TaskIconDataSource, DisplayInfoChangeListe
         synchronized (mDefaultIcons) {
             if (mDefaultIconBase == null) {
                 try (BaseIconFactory bif = getIconFactory()) {
-                    mDefaultIconBase = bif.makeDefaultIcon();
+                    mDefaultIconBase = bif.makeDefaultIcon(mIconProvider);
                 }
             }
 
