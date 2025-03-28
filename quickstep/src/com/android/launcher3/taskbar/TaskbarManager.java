@@ -525,7 +525,7 @@ public class TaskbarManager {
                 + " [dp != null (i.e. mUserUnlocked)]=" + (dp != null)
                 + " FLAG_HIDE_NAVBAR_WINDOW=" + ENABLE_TASKBAR_NAVBAR_UNIFICATION
                 + " dp.isTaskbarPresent=" + (dp == null ? "null" : dp.isTaskbarPresent));
-            SystemUiProxy sysui = SystemUiProxy.INSTANCE.get(mContext);
+            SystemUiProxy sysui = SystemUiProxy.INSTANCE.get(mWindowContext);
             sysui.setTaskbarEnabled(isTaskbarEnabled);
             if (!isTaskbarEnabled || !isLargeScreenTaskbar) {
                 SystemUiProxy.INSTANCE.get(mWindowContext)
