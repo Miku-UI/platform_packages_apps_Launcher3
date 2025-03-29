@@ -30,7 +30,7 @@ import static com.android.launcher3.util.Executors.MAIN_EXECUTOR;
 
 import android.annotation.TargetApi;
 import android.content.Context;
-import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
@@ -69,7 +69,6 @@ import com.android.launcher3.util.WindowBounds;
 import com.android.launcher3.util.window.CachedDisplayInfo;
 import com.android.launcher3.util.window.WindowManagerProxy;
 
-import com.android.quickstep.SystemUiProxy;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -83,7 +82,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-public class InvariantDeviceProfile implements SafeCloseable, SharedPreferences.OnSharedPreferenceChangeListener {
+public class InvariantDeviceProfile implements SafeCloseable {
 
     public static final String TAG = "IDP";
     // We do not need any synchronization for this variable as its only written on UI thread.
@@ -239,7 +238,6 @@ public class InvariantDeviceProfile implements SafeCloseable, SharedPreferences.
     public Point defaultWallpaperSize;
 
     private final ArrayList<OnIDPChangeListener> mChangeListeners = new ArrayList<>();
-    private Context mContext;
 
     @VisibleForTesting
     public InvariantDeviceProfile() {
@@ -272,20 +270,6 @@ public class InvariantDeviceProfile implements SafeCloseable, SharedPreferences.
                     mLandscapeModePreferenceListener,
                     FIXED_LANDSCAPE_MODE
             );
-            mContext = context;
-            LauncherPrefs.getPrefs(context).registerOnSharedPreferenceChangeListener(this);
-        }
-    }
-
-    @Override
-    public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-        if (DeviceProfile.KEY_PHONE_TASKBAR.equals(key)) {
-            // Create the illusion of this taking effect immediately
-            // Also needed because TaskbarManager inits before SystemUiProxy on start
-            boolean enabled = LauncherPrefs.getPrefs(mContext).getBoolean(DeviceProfile.KEY_PHONE_TASKBAR, false);
-            SystemUiProxy.INSTANCE.get(mContext).setTaskbarEnabled(enabled);
-
-            onConfigChanged(mContext, true);
         }
     }
 
@@ -583,10 +567,6 @@ public class InvariantDeviceProfile implements SafeCloseable, SharedPreferences.
     /** Updates IDP using the provided context. Notifies listeners of change. */
     @VisibleForTesting
     public void onConfigChanged(Context context) {
-        onConfigChanged(context, false);
-    }
-
-    private void onConfigChanged(Context context, boolean taskbarChanged) {
         Object[] oldState = toModelState();
 
         // Re-init grid
@@ -595,7 +575,7 @@ public class InvariantDeviceProfile implements SafeCloseable, SharedPreferences.
 
         boolean modelPropsChanged = !Arrays.equals(oldState, toModelState());
         for (OnIDPChangeListener listener : mChangeListeners) {
-            listener.onIdpChanged(modelPropsChanged, taskbarChanged);
+            listener.onIdpChanged(modelPropsChanged);
         }
     }
 
@@ -981,7 +961,7 @@ public class InvariantDeviceProfile implements SafeCloseable, SharedPreferences.
         /**
          * Called when the device provide changes
          */
-        void onIdpChanged(boolean modelPropertiesChanged, boolean taskbarChanged);
+        void onIdpChanged(boolean modelPropertiesChanged);
     }
 
 

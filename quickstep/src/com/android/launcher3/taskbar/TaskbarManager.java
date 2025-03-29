@@ -276,7 +276,7 @@ public class TaskbarManager {
 
     @NonNull
     private TaskbarNavButtonController createDefaultNavButtonController(Context context,
-            TaskbarNavButtonCallbacks navCallbacks) {
+                                                                        TaskbarNavButtonCallbacks navCallbacks) {
         return new TaskbarNavButtonController(
                 context,
                 navCallbacks,
@@ -530,14 +530,12 @@ public class TaskbarManager {
 
             boolean isTaskbarEnabled = dp != null && isTaskbarEnabled(dp);
             debugWhyTaskbarNotDestroyed("recreateTaskbar: isTaskbarEnabled=" + isTaskbarEnabled
-                + " [dp != null (i.e. mUserUnlocked)]=" + (dp != null)
-                + " FLAG_HIDE_NAVBAR_WINDOW=" + ENABLE_TASKBAR_NAVBAR_UNIFICATION
-                + " dp.isTaskbarPresent=" + (dp == null ? "null" : dp.isTaskbarPresent));
-            SystemUiProxy sysui = SystemUiProxy.INSTANCE.get(mWindowContext);
-            sysui.setTaskbarEnabled(isTaskbarEnabled);
+                    + " [dp != null (i.e. mUserUnlocked)]=" + (dp != null)
+                    + " FLAG_HIDE_NAVBAR_WINDOW=" + ENABLE_TASKBAR_NAVBAR_UNIFICATION
+                    + " dp.isTaskbarPresent=" + (dp == null ? "null" : dp.isTaskbarPresent));
             if (!isTaskbarEnabled || !isLargeScreenTaskbar) {
                 SystemUiProxy.INSTANCE.get(mWindowContext)
-                    .notifyTaskbarStatus(/* visible */ false, /* stashed */ false);
+                        .notifyTaskbarStatus(/* visible */ false, /* stashed */ false);
                 if (!isTaskbarEnabled) {
                     return;
                 }
@@ -630,7 +628,7 @@ public class TaskbarManager {
     }
 
     public void transitionTo(int displayId, @BarTransitions.TransitionMode int barMode,
-            boolean animate) {
+                             boolean animate) {
         TaskbarActivityContext taskbar = getTaskbarForDisplay(displayId);
         if (taskbar != null) {
             taskbar.transitionTo(barMode, animate);

@@ -414,7 +414,6 @@ public class Launcher extends StatefulActivity<LauncherState>
     private final CannedAnimationCoordinator mAnimationCoordinator =
             new CannedAnimationCoordinator(this);
 
-    private boolean mPendingRestart;
     private final List<BackPressHandler> mBackPressedHandlers = new ArrayList<>();
     private boolean mIsColdStartupAfterReboot;
     private boolean mForceConfigUpdate;
@@ -755,10 +754,7 @@ public class Launcher extends StatefulActivity<LauncherState>
     }
 
     @Override
-    public void onIdpChanged(boolean modelPropertiesChanged, boolean taskbarChanged) {
-        if (taskbarChanged) {
-            mPendingRestart = true;
-        }
+    public void onIdpChanged(boolean modelPropertiesChanged) {
         onHandleConfigurationChanged();
     }
 
@@ -1323,10 +1319,6 @@ public class Launcher extends StatefulActivity<LauncherState>
 
         DragView.removeAllViews(this);
         TraceHelper.INSTANCE.endSection();
-
-        if (mPendingRestart) {
-            System.exit(0);
-        }
     }
 
     @Override

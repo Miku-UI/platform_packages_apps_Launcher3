@@ -81,8 +81,6 @@ import java.util.function.Consumer;
 @SuppressLint("NewApi")
 public class DeviceProfile {
 
-    public static final String KEY_PHONE_TASKBAR = "pref_allow_phone_taskbar";
-
     private static final int DEFAULT_DOT_SIZE = 100;
     private static final float MIN_FOLDER_TEXT_SIZE_SP = 16f;
     private static final float MIN_WIDGET_PADDING_DP = 6f;
@@ -392,11 +390,11 @@ public class DeviceProfile {
 
     /** TODO: Once we fully migrate to staged split, remove "isMultiWindowMode" */
     DeviceProfile(Context context, InvariantDeviceProfile inv, Info info, WindowBounds windowBounds,
-            SparseArray<DotRenderer> dotRendererCache, boolean isMultiWindowMode,
-            boolean transposeLayoutWithOrientation, boolean isMultiDisplay, boolean isGestureMode,
-            @NonNull final ViewScaleProvider viewScaleProvider,
-            @NonNull final Consumer<DeviceProfile> dimensionOverrideProvider,
-            boolean isTransientTaskbar) {
+                  SparseArray<DotRenderer> dotRendererCache, boolean isMultiWindowMode,
+                  boolean transposeLayoutWithOrientation, boolean isMultiDisplay, boolean isGestureMode,
+                  @NonNull final ViewScaleProvider viewScaleProvider,
+                  @NonNull final Consumer<DeviceProfile> dimensionOverrideProvider,
+                  boolean isTransientTaskbar) {
 
         this.inv = inv;
         this.isLandscape = windowBounds.isLandscape();
@@ -458,9 +456,6 @@ public class DeviceProfile {
                 mTypeIndex = INDEX_DEFAULT;
             }
         }
-
-        boolean allowPhone = LauncherPrefs.getPrefs(context).getBoolean(KEY_PHONE_TASKBAR, true);
-        isTaskbarPresent = (isTablet || allowPhone) && WindowManagerProxy.INSTANCE.get(context).isTaskbarDrawnInProcess();
 
         this.isTransientTaskbar = isTransientTaskbar;
         int transientTaskbarIconSize = pxFromDp(inv.transientTaskbarIconSize[mTypeIndex], mMetrics);
@@ -646,7 +641,7 @@ public class DeviceProfile {
                     isVerticalBarLayout() ? hotseatSpecsProvider.getCalculatedSpec(
                             responsiveAspectRatio, DimensionType.WIDTH, widthPx)
                             : hotseatSpecsProvider.getCalculatedSpec(responsiveAspectRatio,
-                                    DimensionType.HEIGHT, heightPx);
+                            DimensionType.HEIGHT, heightPx);
             hotseatQsbSpace = mResponsiveHotseatSpec.getHotseatQsbSpace();
             hotseatBarBottomSpace =
                     isVerticalBarLayout() ? 0 : mResponsiveHotseatSpec.getEdgePadding();
@@ -800,8 +795,8 @@ public class DeviceProfile {
                 "config_leftRightSplitInPortrait", "bool", "android");
         boolean allowLeftRightSplitInPortrait =
                 com.android.wm.shell.Flags.enableLeftRightSplitInPortrait()
-                    && leftRightSplitPortraitResId > 0
-                    && res.getBoolean(leftRightSplitPortraitResId);
+                        && leftRightSplitPortraitResId > 0
+                        && res.getBoolean(leftRightSplitPortraitResId);
         if (allowLeftRightSplitInPortrait && isTablet) {
             isLeftRightSplit = !isLandscape;
         } else {
@@ -935,8 +930,8 @@ public class DeviceProfile {
     }
 
     private void calculateAndSetWorkspaceVerticalPadding(Context context,
-            InvariantDeviceProfile inv,
-            int extraSpace) {
+                                                         InvariantDeviceProfile inv,
+                                                         int extraSpace) {
         if (mIsResponsiveGrid) {
             workspaceTopPadding = mResponsiveWorkspaceHeightSpec.getStartPaddingPx();
             workspaceBottomPadding = mResponsiveWorkspaceHeightSpec.getEndPaddingPx();

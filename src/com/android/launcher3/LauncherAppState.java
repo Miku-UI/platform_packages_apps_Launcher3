@@ -107,7 +107,7 @@ public class LauncherAppState implements SafeCloseable {
 
         mIsSafeModeEnabled = TraceHelper.allowIpcs("isSafeMode",
                 () -> context.getPackageManager().isSafeMode());
-            mInvariantDeviceProfile.addOnChangeListener((modelPropertiesChanged, taskbarChanged) -> {
+            mInvariantDeviceProfile.addOnChangeListener((modelPropertiesChanged) -> {
             if (modelPropertiesChanged) {
                 refreshAndReloadLauncher();
             }
