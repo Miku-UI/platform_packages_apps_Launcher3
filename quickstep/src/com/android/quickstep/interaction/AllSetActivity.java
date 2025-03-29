@@ -107,7 +107,7 @@ public class AllSetActivity extends Activity {
     private final AnimatedFloat mSwipeProgress = new AnimatedFloat(this::onSwipeProgressUpdate);
 
     private final InvariantDeviceProfile.OnIDPChangeListener mOnIDPChangeListener =
-            (modelPropertiesChanged, taskbarChanged) -> updateHint();
+            (modelPropertiesChanged) -> updateHint();
 
     private TISBindHelper mTISBindHelper;
 
