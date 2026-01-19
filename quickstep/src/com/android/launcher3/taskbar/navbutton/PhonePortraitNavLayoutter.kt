@@ -26,8 +26,6 @@ import android.widget.LinearLayout
 import android.widget.Space
 import com.android.launcher3.R
 import com.android.launcher3.taskbar.TaskbarActivityContext
-import com.android.launcher3.taskbar.TaskbarManager.NAV_BAR_INVERSE
-import com.android.launcher3.util.SettingsCache
 
 class PhonePortraitNavLayoutter(
     resources: Resources,
@@ -80,15 +78,9 @@ class PhonePortraitNavLayoutter(
         navButtonContainer.removeAllViews()
         navButtonContainer.orientation = LinearLayout.HORIZONTAL
 
-        if (SettingsCache.INSTANCE.get(context).getValue(NAV_BAR_INVERSE, 0)) {
-            navButtonContainer.addView(recentsButton)
-            navButtonContainer.addView(homeButton)
-            navButtonContainer.addView(backButton)
-        } else {
-            navButtonContainer.addView(backButton)
-            navButtonContainer.addView(homeButton)
-            navButtonContainer.addView(recentsButton)
-        }
+        navButtonContainer.addView(backButton)
+        navButtonContainer.addView(homeButton)
+        navButtonContainer.addView(recentsButton)
 
         navButtonContainer.layoutParams = navContainerParams
         navButtonContainer.gravity = Gravity.CENTER
