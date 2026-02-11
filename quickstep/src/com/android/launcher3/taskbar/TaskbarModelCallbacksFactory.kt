@@ -17,15 +17,11 @@
 package com.android.launcher3.taskbar
 
 import android.content.Context
-import com.android.launcher3.R
-import com.android.launcher3.util.ResourceBasedOverride
-import com.android.launcher3.util.ResourceBasedOverride.Overrides
+import com.android.launcher3.dagger.LauncherComponentProvider.appComponent
+import javax.inject.Inject
 
 /** Creates [TaskbarModelCallbacks] instances. */
-// We must have constructors with and without context for Overrides.getObject
-open class TaskbarModelCallbacksFactory @JvmOverloads constructor(
-    context: Context? = null
-) : ResourceBasedOverride {
+open class TaskbarModelCallbacksFactory @Inject constructor() {
 
     open fun create(
         activityContext: TaskbarActivityContext,
@@ -35,11 +31,7 @@ open class TaskbarModelCallbacksFactory @JvmOverloads constructor(
     companion object {
         @JvmStatic
         fun newInstance(context: Context): TaskbarModelCallbacksFactory {
-            return Overrides.getObject(
-                TaskbarModelCallbacksFactory::class.java,
-                context,
-                R.string.taskbar_model_callbacks_factory_class,
-            )
+            return context.appComponent.getTaskbarModelCallbacksFactory()
         }
     }
 }
