@@ -16,8 +16,6 @@
 
 package com.android.quickstep.views;
 
-import static com.android.launcher3.util.OverviewReleaseFlags.enableGridOnlyOverview;
-
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Rect;
@@ -38,7 +36,7 @@ import com.android.launcher3.DeviceProfile;
 import com.android.launcher3.Insettable;
 import com.android.launcher3.R;
 import com.android.launcher3.anim.AnimatedFloat;
-import com.android.launcher3.util.DisplayController;
+import com.android.launcher3.display.DisplayController;
 import com.android.launcher3.util.MultiValueAlpha;
 import com.android.launcher3.util.NavigationMode;
 import com.android.launcher3.util.RandomResUtils;
@@ -342,7 +340,8 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
     private void updateForIsTablet() {
         assert mDp != null;
         // Update flags to see if split button should be hidden.
-        updateSplitButtonHiddenFlags(FLAG_SMALL_SCREEN_HIDE_SPLIT, !mDp.getDeviceProperties().isTablet());
+        updateSplitButtonHiddenFlags(FLAG_SMALL_SCREEN_HIDE_SPLIT,
+                !mDp.getDeviceProperties().isLargeScreen());
         updateActionButtonsVisibility();
     }
 
@@ -351,7 +350,8 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
             return;
         }
         boolean showSingleTaskActions = !mIsGroupedTask;
-        boolean showGroupActions = mIsGroupedTask && mDp.getDeviceProperties().isTablet() && mCanSaveAppPair;
+        boolean showGroupActions = mIsGroupedTask && mDp.getDeviceProperties().isLargeScreen()
+                && mCanSaveAppPair;
         Log.d(TAG, "updateActionButtonsVisibility() called: showSingleTaskActions = ["
                 + showSingleTaskActions + "], showGroupActions = [" + showGroupActions + "]");
         getActionsAlphas().get(INDEX_GROUPED_ALPHA).setValue(showSingleTaskActions ? 1 : 0);
@@ -453,7 +453,7 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
             return 0;
         }
 
-        if (mDp.getDeviceProperties().isTablet() && enableGridOnlyOverview()) {
+        if (mDp.getDeviceProperties().isLargeScreen()) {
             int modalTaskbarHeight = mDp.getTaskbarProfile().isTransientTaskbar()
                     ? mDp.getTaskbarProfile().getStashedTaskbarHeight()
                     : mDp.getTaskbarProfile().getHeight();
@@ -478,12 +478,12 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
 
         requestLayout();
 
-        int splitIconRes = dp.isLeftRightSplit
+        int splitIconRes = dp.getSysuiProfile().isLeftRightSplit()
                 ? R.drawable.ic_split_horizontal
                 : R.drawable.ic_split_vertical;
         mSplitButton.setCompoundDrawablesRelativeWithIntrinsicBounds(splitIconRes, 0, 0, 0);
 
-        int appPairIconRes = dp.isLeftRightSplit
+        int appPairIconRes = dp.getSysuiProfile().isLeftRightSplit()
                 ? R.drawable.ic_save_app_pair_left_right
                 : R.drawable.ic_save_app_pair_up_down;
         mSaveAppPairButton.setCompoundDrawablesRelativeWithIntrinsicBounds(
