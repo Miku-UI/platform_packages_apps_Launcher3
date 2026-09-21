@@ -53,6 +53,7 @@ import com.android.launcher3.qsb.QsbAppWidgetHost
 import com.android.launcher3.qsb.QuickstepQsbHostImpl
 import com.android.launcher3.secondarydisplay.SecondaryDisplayDelegate
 import com.android.launcher3.secondarydisplay.SecondaryDisplayQuickstepDelegateImpl
+import com.android.launcher3.taskbar.TaskbarManagerImpl
 import com.android.launcher3.testing.TestInformationHandler
 import com.android.launcher3.uioverrides.QuickstepProvidersUpdateDispatcher
 import com.android.launcher3.uioverrides.QuickstepWidgetHolder.QuickstepWidgetHolderFactory
@@ -97,6 +98,7 @@ import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.multibindings.ElementsIntoSet
+import dagger.multibindings.IntoSet
 import java.io.File
 import java.util.function.Consumer
 import javax.inject.Named
@@ -226,6 +228,11 @@ object StaticObjectModule {
         if (ctx.resources.getBoolean(R.bool.config_searchAllEntrypointsEnabledDefault)) {
             setOf(ContextualSearchStateManager.SEARCH_ALL_ENTRYPOINTS_ENABLED_URI)
         } else emptySet()
+
+    @Provides
+    @IntoSet
+    @Named("SETTINGS_ENABLED_BY_DEFAULT")
+    fun provideNavigationBarHintDefault(): Uri = TaskbarManagerImpl.NAVIGATION_BAR_HINT
 
     @Provides
     @JvmStatic
