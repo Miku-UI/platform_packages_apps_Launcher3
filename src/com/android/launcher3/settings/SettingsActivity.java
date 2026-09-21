@@ -53,6 +53,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.launcher3.BuildConfig;
 import com.android.launcher3.InvariantDeviceProfile;
+import com.android.launcher3.lineage.LineageUtils;
 import com.android.launcher3.LauncherFiles;
 import com.android.launcher3.R;
 import com.android.launcher3.display.DisplayController;
