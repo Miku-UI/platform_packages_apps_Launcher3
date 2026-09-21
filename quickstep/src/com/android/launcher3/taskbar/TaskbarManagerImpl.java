@@ -140,6 +140,9 @@ public class TaskbarManagerImpl {
     private static final Uri NAV_BAR_KIDS_MODE = Settings.Secure.getUriFor(
             Settings.Secure.NAV_BAR_KIDS_MODE);
 
+    public static final Uri ENABLE_TASKBAR = Settings.System.getUriFor(
+            "task_bar_enable");
+
     public static final Uri NAVIGATION_BAR_HINT = Settings.System.getUriFor(
             "navigation_bar_hint");
 
@@ -350,9 +353,18 @@ public class TaskbarManagerImpl {
                 v -> onSettingChanged(v, TaskbarActivityContext::isInKidsMode));
         cleanupTasks.addCloseable(getTaskbarUiThread(), navBarKidsModeSafeCloseable);
 
-        // Changing the gesture-nav hint changes Taskbar window height; restart like Blooming.
+        // Changing taskbar enable/hint changes window height; restart like Blooming.
+        var enableTaskbarSafeCloseable = settingsCache.getListenableRef(ENABLE_TASKBAR)
+                .forEach(getTaskbarUiThread(), v -> {
+                    System.exit(0);
+                    return null;
+                });
+        cleanupTasks.addCloseable(getTaskbarUiThread(), enableTaskbarSafeCloseable);
         var navBarHintSafeCloseable = settingsCache.getListenableRef(NAVIGATION_BAR_HINT)
-                .forEach(getTaskbarUiThread(), v -> System.exit(0));
+                .forEach(getTaskbarUiThread(), v -> {
+                    System.exit(0);
+                    return null;
+                });
         cleanupTasks.addCloseable(getTaskbarUiThread(), navBarHintSafeCloseable);
 
         SimpleBroadcastReceiver shutdownReceiver = new SimpleBroadcastReceiver(

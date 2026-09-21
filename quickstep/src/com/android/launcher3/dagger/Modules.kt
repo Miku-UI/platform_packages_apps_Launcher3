@@ -235,6 +235,11 @@ object StaticObjectModule {
     fun provideNavigationBarHintDefault(): Uri = TaskbarManagerImpl.NAVIGATION_BAR_HINT
 
     @Provides
+    @IntoSet
+    @Named("SETTINGS_ENABLED_BY_DEFAULT")
+    fun provideEnableTaskbarDefault(): Uri = TaskbarManagerImpl.ENABLE_TASKBAR
+
+    @Provides
     @JvmStatic
     @LauncherAppSingleton
     @Named(WINDOW_BLUR_STATE)
