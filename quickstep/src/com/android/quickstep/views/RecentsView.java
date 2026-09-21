@@ -3546,6 +3546,11 @@ public abstract class RecentsView<
         mContainer.getStatsLogManager().logger().log(LAUNCHER_TASK_CLEAR_ALL);
     }
 
+    /** Blooming overlay helper; A17's click handler is private and takes a View. */
+    public void dismissAllTasks() {
+        dismissAllTasks(this);
+    }
+
     private void createDesk() {
         SystemUiProxy.INSTANCE
                 .get(getContext())

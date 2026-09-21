@@ -537,7 +537,7 @@ public interface TaskShortcutFactory {
                             Toast.LENGTH_SHORT);
                         appKilled.show();
                         ((RecentsView)mContainer.getOverviewPanel())
-                              .dismissTask(mTaskContainer.getTaskView().getTaskViewId(), true /* animate */, true /* removeTask */);
+                              .dismissTask(mTaskContainer.getTaskView().getTaskViewId(), true /* removeTask */);
                     } catch (RemoteException e) { }
                 }
             }
