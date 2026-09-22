@@ -37,6 +37,7 @@ import static com.android.launcher3.desktop.DesktopStateProvider.getDesktopState
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_FOLDER_OPEN;
 import static com.android.launcher3.taskbar.TaskbarAutohideSuspendController.FLAG_AUTOHIDE_SUSPEND_DRAGGING;
 import static com.android.launcher3.taskbar.TaskbarAutohideSuspendController.FLAG_AUTOHIDE_SUSPEND_FULLSCREEN;
+import static com.android.launcher3.taskbar.TaskbarManagerImpl.ENABLE_TASKBAR;
 import static com.android.launcher3.taskbar.TaskbarManagerImpl.NAVIGATION_BAR_HINT;
 import static com.android.launcher3.taskbar.TaskbarStashController.FLAG_IN_SECONDARY_LAUNCHER_ON_CD;
 import static com.android.launcher3.taskbar.TaskbarStashController.FLAG_STASHED_IN_APP_AUTO;
@@ -290,6 +291,8 @@ public class TaskbarActivityContext extends BaseTaskbarContext {
     private final boolean mIsSafeModeEnabled;
     private final boolean mIsUserSetupComplete;
     private final boolean mIsNavBarKidsMode;
+    private final boolean mIsTaskbarEnabled;
+    private final boolean mIsNavbarHintEnabled;
 
     private boolean mIsDestroyed = false;
 
@@ -353,6 +356,8 @@ public class TaskbarActivityContext extends BaseTaskbarContext {
         SettingsCache settingsCache = SettingsCache.INSTANCE.get(this);
         mIsUserSetupComplete = settingsCache.getValue(URI_USER_SETUP_COMPLETE);
         mIsNavBarKidsMode = settingsCache.getValue(URI_NAV_BAR_KIDS_MODE);
+        mIsTaskbarEnabled = settingsCache.getValue(ENABLE_TASKBAR);
+        mIsNavbarHintEnabled = settingsCache.getValue(NAVIGATION_BAR_HINT);
         mBubbleFeatureConfig =
                 new BubbleFeatureConfigImpl(mWindowContext, getDesktopState(mWindowContext));
 
@@ -2470,6 +2475,14 @@ public class TaskbarActivityContext extends BaseTaskbarContext {
 
     public boolean isUserSetupComplete() {
         return mIsUserSetupComplete;
+    }
+
+    public boolean isTaskbarEnabled() {
+        return mIsTaskbarEnabled;
+    }
+
+    public boolean isNavbarHintEnabled() {
+        return mIsNavbarHintEnabled;
     }
 
     public boolean isInKidsMode() {

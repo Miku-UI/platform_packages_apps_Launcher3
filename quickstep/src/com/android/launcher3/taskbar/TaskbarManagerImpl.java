@@ -353,18 +353,15 @@ public class TaskbarManagerImpl {
                 v -> onSettingChanged(v, TaskbarActivityContext::isInKidsMode));
         cleanupTasks.addCloseable(getTaskbarUiThread(), navBarKidsModeSafeCloseable);
 
-        // Changing taskbar enable/hint changes window height; restart like Blooming.
+        // Restart only when the setting actually changes. forEach emits the current
+        // value on subscribe; exiting there loops Launcher3 (black home, status bar only).
         var enableTaskbarSafeCloseable = settingsCache.getListenableRef(ENABLE_TASKBAR)
-                .forEach(getTaskbarUiThread(), v -> {
-                    System.exit(0);
-                    return null;
-                });
+                .forEach(getTaskbarUiThread(),
+                        v -> onTaskbarChanged(v, TaskbarActivityContext::isTaskbarEnabled));
         cleanupTasks.addCloseable(getTaskbarUiThread(), enableTaskbarSafeCloseable);
         var navBarHintSafeCloseable = settingsCache.getListenableRef(NAVIGATION_BAR_HINT)
-                .forEach(getTaskbarUiThread(), v -> {
-                    System.exit(0);
-                    return null;
-                });
+                .forEach(getTaskbarUiThread(),
+                        v -> onTaskbarChanged(v, TaskbarActivityContext::isNavbarHintEnabled));
         cleanupTasks.addCloseable(getTaskbarUiThread(), navBarHintSafeCloseable);
 
         SimpleBroadcastReceiver shutdownReceiver = new SimpleBroadcastReceiver(
@@ -500,6 +497,18 @@ public class TaskbarManagerImpl {
             if (activity != null && oldValue.apply(activity) != newValue) {
                 resource.debugMsg("onSettingChanged");
                 recreateTaskbarForDisplay(resource, 0, "onSettingChanged");
+            }
+        });
+        return Unit.INSTANCE;
+    }
+
+    private Unit onTaskbarChanged(boolean newValue,
+            ToBooleanFunction<TaskbarActivityContext> oldValue) {
+        mResources.forEach(resource -> {
+            var activity = resource.getTaskbar();
+            if (activity != null && oldValue.apply(activity) != newValue) {
+                resource.debugMsg("Taskbar changed! Restarting process!");
+                System.exit(0);
             }
         });
         return Unit.INSTANCE;
