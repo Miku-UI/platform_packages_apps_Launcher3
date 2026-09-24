@@ -84,8 +84,12 @@ class TaskbarUiState {
         _isTaskbarTransient = isTransient
     }
 
-    fun isTransientTaskbar() =
-        _isTaskbarTransient && isPrimaryDisplay && !_deviceProfile.deviceProperties.isPhone
+    fun isTransientTaskbar(): Boolean {
+        // Match TaskbarActivityContext: phones with a taskbar window are transient, not phone-mode.
+        val props = _deviceProfile.deviceProperties
+        val isPhoneMode = props.isPhone && !props.taskbarConfiguration.isTaskbarPresent
+        return _isTaskbarTransient && isPrimaryDisplay && !isPhoneMode
+    }
 
     fun setIsTaskbarViewShown(isShown: Boolean) {
         _isTaskbarViewShown = isShown
