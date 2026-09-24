@@ -53,7 +53,6 @@ import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_N
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_VOICE_INTERACTION_WINDOW_SHOWING;
 import static com.android.wm.shell.Flags.enableBubbleBar;
 import static com.android.wm.shell.Flags.enableBubbleBarOnPhones;
-import static com.android.wm.shell.Flags.enableTinyTaskbar;
 import static com.android.wm.shell.Flags.fixSwipeUpNotificationShadeWithBubbleBar;
 
 import static java.lang.invoke.MethodHandles.Lookup.PROTECTED;
@@ -690,6 +689,10 @@ public class TaskbarActivityContext extends BaseTaskbarContext {
      * single window for taskbar and navbar.
      */
     public boolean isPhoneMode() {
+        if (mDeviceProfile.getDeviceProperties().getTaskbarConfiguration().isTaskbarPresent()
+                && !isTaskbarEnabled()) {
+            return true;
+        }
         return isDeviceProfileForPhoneMode(mDeviceProfile);
     }
 
@@ -724,7 +727,7 @@ public class TaskbarActivityContext extends BaseTaskbarContext {
 
     /** Returns {@code true} iff a tiny version of taskbar is shown on phone. */
     public boolean isTinyTaskbar() {
-        return enableTinyTaskbar()
+        return mDeviceProfile.enableTinyTaskbar()
                 && mDeviceProfile.getDeviceProperties().isPhone()
                 && mDeviceProfile.getDeviceProperties().getTaskbarConfiguration()
                 .isTaskbarPresent();

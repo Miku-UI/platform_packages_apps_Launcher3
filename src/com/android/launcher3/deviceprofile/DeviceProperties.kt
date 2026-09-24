@@ -70,8 +70,10 @@ data class DeviceProperties(
             val heightPx = windowBounds.bounds.height()
             val availableWidthPx = windowBounds.availableSize.x
             val availableHeightPx = windowBounds.availableSize.y
+            // Miku phones always get a taskbar window; task_bar_enable then gates isPhoneMode.
             val taskbarOrBubbleBarOnPhones =
-                Flags.enableTinyTaskbar() ||
+                !isLargeScreen ||
+                    Flags.enableTinyTaskbar() ||
                     (Flags.enableBubbleBar() && Flags.enableBubbleBarOnPhones())
             return DeviceProperties(
                 windowX = windowX,
