@@ -401,6 +401,19 @@ public class DragLayer extends BaseDragLayer<Launcher> implements LauncherOverla
     }
 
     /**
+     * Hide {@code view} and keep it as the animated drop view so {@link #clearAnimatedView}
+     * can finish the deferred drag later.
+     */
+    public void beginCustomDropDisappear(DragView view) {
+        if (mDropAnim != null) {
+            mDropAnim.cancel();
+            mDropAnim = null;
+        }
+        mDropView = view;
+        view.setAlpha(0f);
+    }
+
+    /**
      * Remove the drop view and end the drag animation.
      *
      * @return {@link DragView} that is removed.

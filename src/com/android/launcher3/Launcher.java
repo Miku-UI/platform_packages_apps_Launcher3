@@ -2509,6 +2509,20 @@ public class Launcher extends StatefulActivity<LauncherState>
     }
 
     /**
+     * Called while a workspace or hotseat item is still attached, immediately before it is detached.
+     */
+    public void onWorkspaceItemRemoving(@Nullable View view) {}
+
+    /**
+     * Optionally replace the drop-target shrink animation when an item is removed from the
+     * workspace. Returning {@code true} means a custom animation started and {@code endCallback}
+     * will be invoked when it finishes.
+     */
+    public boolean animateDragViewRemoval(DragView dragView, Runnable endCallback) {
+        return false;
+    }
+
+    /**
      * Animates Launcher elements during a transition to the All Apps page.
      *
      * @param progress Transition progress from 0 to 1; where 0 => home and 1 => all apps.

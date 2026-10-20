@@ -3539,6 +3539,9 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
      * For opposite operation. See {@link #addInScreen}.
      */
     public void removeWorkspaceItem(View v) {
+        if (v != null) {
+            mLauncher.onWorkspaceItemRemoving(v);
+        }
         CellLayout parentCell = getParentCellLayoutForView(v);
         if (parentCell != null) {
             parentCell.removeView(v);
@@ -3696,6 +3699,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                 ItemInfo info = (ItemInfo) child.getTag();
 
                 if (matcher.test(info)) {
+                    mLauncher.onWorkspaceItemRemoving(child);
                     layout.removeViewInLayout(child);
                     if (child instanceof DropTarget) {
                         mDragController.removeDropTarget((DropTarget) child);

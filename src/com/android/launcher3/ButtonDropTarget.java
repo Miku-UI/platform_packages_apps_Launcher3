@@ -262,8 +262,6 @@ public abstract class ButtonDropTarget extends TextView
 
         final DragLayer dragLayer = mDropTargetHandler.getDragLayer();
         final DragView dragView = d.dragView;
-        final Rect to = getIconRect(d);
-        final float scale = (float) to.width() / dragView.getMeasuredWidth();
         dragView.detachContentView(/* reattachToPreviousParent= */ true);
 
         mDropTargetBar.deferOnDragEnd();
@@ -274,7 +272,18 @@ public abstract class ButtonDropTarget extends TextView
             mDropTargetHandler.onDropAnimationComplete();
         };
 
+        if (this instanceof DeleteDropTarget
+                && mActivityContext instanceof Launcher launcher
+                && launcher.animateDragViewRemoval(dragView, () -> {
+                    onAnimationEndRunnable.run();
+                    dragLayer.clearAnimatedView();
+                })) {
+            dragLayer.beginCustomDropDisappear(dragView);
+            return;
+        }
 
+        final Rect to = getIconRect(d);
+        final float scale = (float) to.width() / dragView.getMeasuredWidth();
         dragLayer.animateView(d.dragView, to, scale, 0.1f, 0.1f,
                 DRAG_VIEW_DROP_DURATION,
                 Interpolators.DECELERATE_2, onAnimationEndRunnable,
