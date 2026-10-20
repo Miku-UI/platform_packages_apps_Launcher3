@@ -289,8 +289,13 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
     private int calculateMaxNumIcons() {
         DeviceProfile deviceProfile = mActivityContext.getDeviceProfile();
         int availableWidth = deviceProfile.getDeviceProperties().getWidthPx();
-        int defaultEdgeMargin = getResources().getDimensionPixelSize(
-                deviceProfile.inv.inlineNavButtonsEndSpacing);
+        int barEndOffset = deviceProfile.getHotseatProfile().getBarEndOffset();
+        // inlineNavButtonsEndSpacing is the 3-button end inset. Centered gesture taskbar has no
+        // inline nav, so reserving it on both sides drops a hotseat icon on 4-column phones.
+        int defaultEdgeMargin = (barEndOffset == 0 && !mShouldTryStartAlign)
+                ? 0
+                : getResources().getDimensionPixelSize(
+                        deviceProfile.inv.inlineNavButtonsEndSpacing);
         int spaceForBubbleBar =
                 Math.round(mControllerCallbacks.getBubbleBarMaxCollapsedWidthIfVisible());
 
@@ -298,10 +303,10 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
         // center aligned with nav bar shown, reserve space on both sides.
         availableWidth -= Math.max(
                 defaultEdgeMargin + spaceForBubbleBar,
-                deviceProfile.getHotseatProfile().getBarEndOffset());
+                barEndOffset);
         availableWidth -= Math.max(
                 defaultEdgeMargin + (mShouldTryStartAlign ? 0 : spaceForBubbleBar),
-                mShouldTryStartAlign ? 0 : deviceProfile.getHotseatProfile().getBarEndOffset());
+                mShouldTryStartAlign ? 0 : barEndOffset);
 
         // The space taken by an item icon used during layout.
         int iconSize = 2 * mItemMarginLeftRight + mIconTouchSize;
@@ -800,9 +805,11 @@ public class TaskbarView extends FrameLayout implements FolderIcon.FolderIconPar
 
     /**
      * Calculate how many icon we need to not show in Taskbar that are present in hotseat.
+     * Transient taskbar is a centered pill sized to its children, so hotseat icons are not dropped.
      */
     private int getIgnoreCountForTaskbarIcons(int recentsIcons, int hotseatIcons) {
-        if (TaskbarPopupController.canPinAppsOverflow()) {
+        if (TaskbarPopupController.canPinAppsOverflow()
+                || mActivityContext.isTransientTaskbar()) {
             return 0;
         }
 
