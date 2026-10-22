@@ -141,6 +141,9 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
             lp.setup(mCellWidth, mCellHeight, invertLayoutHorizontally(), mCountX, mCountY,
                     mBorderSpace);
         }
+        if (mContainerType == WORKSPACE) {
+            WorkspaceFreeMode.applyToLayoutParams(child, lp, this);
+        }
     }
 
     // Set whether or not to invert the layout horizontally if the layout is in RTL mode.
@@ -191,6 +194,9 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
                             ? dp.getWorkspaceProfile().getWorkspaceCellPaddingXPx()
                             : (int) (dp.getWorkspaceProfile().getEdgeMarginPx() / 2f);
             child.setPadding(cellPaddingX, cellPaddingY, cellPaddingX, 0);
+        }
+        if (mContainerType == WORKSPACE) {
+            WorkspaceFreeMode.applyToLayoutParams(child, lp, this);
         }
         int childWidthMeasureSpec = MeasureSpec.makeMeasureSpec(lp.width, MeasureSpec.EXACTLY);
         int childheightMeasureSpec = MeasureSpec.makeMeasureSpec(lp.height, MeasureSpec.EXACTLY);

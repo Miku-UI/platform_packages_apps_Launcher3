@@ -40,6 +40,7 @@ import com.android.launcher3.LauncherSettings.Favorites.ITEM_TYPE_DEEP_SHORTCUT
 import com.android.launcher3.LauncherSettings.Favorites.RESTORED
 import com.android.launcher3.LauncherSettings.Favorites._ID
 import com.android.launcher3.Utilities
+import com.android.launcher3.WorkspaceFreeMode
 import com.android.launcher3.automation.AutomationRepository
 import com.android.launcher3.backuprestore.LauncherRestoreEventLogger
 import com.android.launcher3.backuprestore.LauncherRestoreEventLogger.RestoreError
@@ -356,6 +357,8 @@ constructor(
         info.screenId = screen
         info.cellX = cellX
         info.cellY = cellY
+        info.freeX = freeX
+        info.freeY = freeY
     }
 
     /**
@@ -419,6 +422,7 @@ constructor(
     /** check & update map of what's occupied; used to discard overlapping/invalid items */
     fun checkItemPlacement(item: ItemInfo): Boolean {
         val containerIndex = item.screenId
+        val allowOverlap = allowOverlappingItems(item)
         if (item.container == CONTAINER_HOTSEAT) {
             val hotseatOccupancy = occupied[CONTAINER_HOTSEAT]
 
@@ -431,7 +435,7 @@ constructor(
             }
 
             if (hotseatOccupancy != null) {
-                if (hotseatOccupancy.cells[item.screenId][0]) {
+                if (hotseatOccupancy.cells[item.screenId][0] && !allowOverlap) {
                     Log.e(
                         TAG,
                         "Error loading shortcut into hotseat $item into position (${item.screenId}:${item.cellX},${item.cellY}) already occupied",
@@ -460,6 +464,9 @@ constructor(
                 item.cellX + item.spanX > countX ||
                 item.cellY + item.spanY > countY
         ) {
+            if (allowOverlap) {
+                return true
+            }
             Log.e(
                 TAG,
                 "Error loading shortcut $item into cell ($containerIndex-${item.screenId}:${item.cellX},${item.cellY}) out of screen bounds ($countX x $countY)",
@@ -472,6 +479,12 @@ constructor(
         }
         val occupancy = occupied[item.screenId]
 
+        // Free layout allows overlapping items; keep them even when the nearest cell is shared.
+        if (allowOverlap) {
+            occupancy.markCells(item, true)
+            return true
+        }
+
         // Check if any workspace icons overlap with each other
         if (occupancy.isRegionVacant(item.cellX, item.cellY, item.spanX, item.spanY)) {
             occupancy.markCells(item, true)
@@ -483,6 +496,13 @@ constructor(
             )
             return false
         }
+    }
+
+    private fun allowOverlappingItems(item: ItemInfo): Boolean {
+        if (item.hasFreePosition() || WorkspaceFreeMode.isEnabled(context)) {
+            return true
+        }
+        return WorkspaceFreeMode.isFreeDb(model.modelDbController.databaseName)
     }
 
     @AssistedFactory

@@ -114,6 +114,8 @@ open class ModelWriter(
                         put(Favorites.CONTAINER, item.container)
                         put(Favorites.CELLX, item.cellX)
                         put(Favorites.CELLY, item.cellY)
+                        put(Favorites.FREEX, item.freeX)
+                        put(Favorites.FREEY, item.freeY)
                         put(Favorites.RANK, item.rank)
                         put(Favorites.SCREEN, item.screenId)
                     }

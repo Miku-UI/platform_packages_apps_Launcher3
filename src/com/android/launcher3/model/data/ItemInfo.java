@@ -52,6 +52,7 @@ import com.android.launcher3.LauncherSettings;
 import com.android.launcher3.LauncherSettings.Animation;
 import com.android.launcher3.LauncherSettings.Favorites;
 import com.android.launcher3.Workspace;
+import com.android.launcher3.WorkspaceFreeMode;
 import com.android.launcher3.logger.LauncherAtom;
 import com.android.launcher3.logger.LauncherAtom.AllAppsContainer;
 import com.android.launcher3.logger.LauncherAtom.Attribute;
@@ -140,6 +141,16 @@ public class ItemInfo {
     public int cellY = -1;
 
     /**
+     * Free-layout X as 0–10000 of the workspace page width, or {@link WorkspaceFreeMode#UNSET}.
+     */
+    public int freeX = WorkspaceFreeMode.UNSET;
+
+    /**
+     * Free-layout Y as 0–10000 of the workspace page height, or {@link WorkspaceFreeMode#UNSET}.
+     */
+    public int freeY = WorkspaceFreeMode.UNSET;
+
+    /**
      * Indicates the X cell span.
      */
     public int spanX = 1;
@@ -218,6 +229,8 @@ public class ItemInfo {
         title = info.title;
         cellX = info.cellX;
         cellY = info.cellY;
+        freeX = info.freeX;
+        freeY = info.freeY;
         spanX = info.spanX;
         spanY = info.spanY;
         minSpanX = info.minSpanX;
@@ -295,6 +308,8 @@ public class ItemInfo {
                 .put(LauncherSettings.Favorites.SCREEN, screenId)
                 .put(LauncherSettings.Favorites.CELLX, cellX)
                 .put(LauncherSettings.Favorites.CELLY, cellY)
+                .put(LauncherSettings.Favorites.FREEX, freeX)
+                .put(LauncherSettings.Favorites.FREEY, freeY)
                 .put(LauncherSettings.Favorites.SPANX, spanX)
                 .put(LauncherSettings.Favorites.SPANY, spanY)
                 .put(LauncherSettings.Favorites.RANK, rank);
@@ -306,9 +321,22 @@ public class ItemInfo {
         screenId = values.getAsInteger(LauncherSettings.Favorites.SCREEN);
         cellX = values.getAsInteger(LauncherSettings.Favorites.CELLX);
         cellY = values.getAsInteger(LauncherSettings.Favorites.CELLY);
+        Integer storedFreeX = values.getAsInteger(LauncherSettings.Favorites.FREEX);
+        Integer storedFreeY = values.getAsInteger(LauncherSettings.Favorites.FREEY);
+        freeX = storedFreeX != null ? storedFreeX : WorkspaceFreeMode.UNSET;
+        freeY = storedFreeY != null ? storedFreeY : WorkspaceFreeMode.UNSET;
         spanX = values.getAsInteger(LauncherSettings.Favorites.SPANX);
         spanY = values.getAsInteger(LauncherSettings.Favorites.SPANY);
         rank = values.getAsInteger(LauncherSettings.Favorites.RANK);
+    }
+
+    public boolean hasFreePosition() {
+        return freeX >= 0 && freeY >= 0;
+    }
+
+    public void clearFreePosition() {
+        freeX = WorkspaceFreeMode.UNSET;
+        freeY = WorkspaceFreeMode.UNSET;
     }
 
     /**

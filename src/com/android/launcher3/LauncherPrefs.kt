@@ -320,6 +320,11 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
         @JvmField
         val FIXED_LANDSCAPE_MODE = backedUpItem(SettingsActivity.FIXED_LANDSCAPE_MODE, false)
 
+        const val WORKSPACE_FREE_MODE_KEY: String = "pref_workspace_free_mode"
+
+        @JvmField
+        val WORKSPACE_FREE_MODE = backedUpItem(WORKSPACE_FREE_MODE_KEY, false)
+
         @JvmField
         val WORKSPACE_ITEMS_LABEL_HIDDEN = backedUpItem("pref_workspace_items_label_hidden", false)
 

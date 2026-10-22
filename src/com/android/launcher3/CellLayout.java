@@ -539,7 +539,8 @@ public class CellLayout extends ViewGroup {
             canvas.save();
             if (cellDrawing.mDelegateCellX >= 0 && cellDrawing.mDelegateCellY >= 0) {
                 cellToPoint(cellDrawing.mDelegateCellX, cellDrawing.mDelegateCellY, mTempLocation);
-                canvas.translate(mTempLocation[0], mTempLocation[1]);
+                canvas.translate(mTempLocation[0] + cellDrawing.mDelegateShiftX,
+                        mTempLocation[1] + cellDrawing.mDelegateShiftY);
             }
             cellDrawing.drawUnderItem(canvas);
             canvas.restore();
@@ -674,7 +675,8 @@ public class CellLayout extends ViewGroup {
             canvas.save();
             if (bg.mDelegateCellX >= 0 && bg.mDelegateCellY >= 0) {
                 cellToPoint(bg.mDelegateCellX, bg.mDelegateCellY, mTempLocation);
-                canvas.translate(mTempLocation[0], mTempLocation[1]);
+                canvas.translate(mTempLocation[0] + bg.mDelegateShiftX,
+                        mTempLocation[1] + bg.mDelegateShiftY);
             }
             bg.drawOverItem(canvas);
             canvas.restore();
@@ -1591,6 +1593,15 @@ public class CellLayout extends ViewGroup {
     /** Create area for resizing the widget in given the direction. */
     public boolean createAreaForResize(int cellX, int cellY, int spanX, int spanY,
             View dragView, int[] direction, boolean commit) {
+        if (WorkspaceFreeMode.isActive(this)) {
+            if (commit && dragView != null && dragView.getTag() instanceof ItemInfo info) {
+                info.spanX = spanX;
+                info.spanY = spanY;
+                mActivity.getModelWriter().updateItemInDatabase(info);
+            }
+            mShortcutsAndWidgets.requestLayout();
+            return true;
+        }
         final ItemConfiguration swapSolution = checkAreaForResize(cellX, cellY, spanX, spanY,
                 dragView, direction);
 
@@ -1672,6 +1683,13 @@ public class CellLayout extends ViewGroup {
         }
         if (result == null) {
             result = new int[]{-1, -1};
+        }
+        if (WorkspaceFreeMode.isActive(this)) {
+            findNearestAreaIgnoreOccupied(pixelX, pixelY, spanX, spanY, result);
+            resultSpan[0] = spanX;
+            resultSpan[1] = spanY;
+            mPreviousSolution = null;
+            return result;
         }
 
         ItemConfiguration finalSolution = null;

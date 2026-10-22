@@ -121,6 +121,7 @@ public class DatabaseHelper extends SQLiteOpenHelper implements
         if (!schemaFile.exists()) {
             handleOneTimeDataUpgrade(db);
         }
+        Favorites.ensureFreePositionColumns(db, Favorites.TABLE_NAME);
         DbDowngradeHelper.updateSchemaFile(schemaFile, SCHEMA_VERSION, mContext);
     }
 
@@ -307,6 +308,10 @@ public class DatabaseHelper extends SQLiteOpenHelper implements
      * in our model.
      */
     public void removeGhostWidgets(SQLiteDatabase db) {
+        removeGhostWidgets(db, new IntSet());
+    }
+
+    public void removeGhostWidgets(SQLiteDatabase db, IntSet extraValidWidgets) {
         // Get all existing widget ids.
         final LauncherWidgetHolder holder = newLauncherWidgetHolder();
         try {
@@ -322,6 +327,9 @@ public class DatabaseHelper extends SQLiteOpenHelper implements
             final IntSet validWidgets = IntSet.wrap(LauncherDbUtils.queryIntArray(false, db,
                     Favorites.TABLE_NAME, Favorites.APPWIDGET_ID,
                     "itemType=" + Favorites.ITEM_TYPE_APPWIDGET, null, null));
+            if (extraValidWidgets != null) {
+                validWidgets.addAll(extraValidWidgets);
+            }
             boolean isAnyWidgetRemoved = false;
             for (int widgetId : allWidgets) {
                 if (!validWidgets.contains(widgetId)) {

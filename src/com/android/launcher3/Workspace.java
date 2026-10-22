@@ -606,9 +606,17 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             mAccessibilityDragListener.onDragStart(dragObject, options);
         }
         if (!mLauncher.isInState(EDIT_MODE)) {
-            mLauncher.getStateManager().goToState(
-                    (enableCursorDrivenWorkflows() && options.isMouseDrag)
-                            ? DESKTOP_DRAG_MODE : SPRING_LOADED);
+            if (WorkspaceFreeMode.isEnabled(mLauncher)) {
+                // Stay full-size (no spring-loaded grid), but leave All Apps / pickers
+                // so the icon can be placed on the workspace.
+                if (mLauncher.isInState(ALL_APPS) || dragObject.dragSource != this) {
+                    mLauncher.getStateManager().goToState(NORMAL);
+                }
+            } else {
+                mLauncher.getStateManager().goToState(
+                        (enableCursorDrivenWorkflows() && options.isMouseDrag)
+                                ? DESKTOP_DRAG_MODE : SPRING_LOADED);
+            }
         }
         mStatsLogManager.logger().withItemInfo(dragObject.dragInfo)
                 .withInstanceId(dragObject.logInstanceId)
@@ -661,6 +669,19 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
 
         // Set the wallpaper dimensions when Launcher starts up
         setWallpaperDimension();
+        LauncherPrefs.get(getContext()).addListener(this::onWorkspaceFreeModePrefChanged,
+                LauncherPrefs.WORKSPACE_FREE_MODE);
+    }
+
+    private void onWorkspaceFreeModePrefChanged(String key) {
+        if (!WorkspaceFreeMode.PREF_KEY.equals(key)) {
+            return;
+        }
+        Executors.MODEL_EXECUTOR.execute(() -> {
+            mLauncher.getModel().getModelDbController().switchActiveStore();
+            Executors.MAIN_EXECUTOR.execute(() ->
+                    mLauncher.getModel().forceReload("workspace_free_mode"));
+        });
     }
 
     private void setupLayoutTransition() {
@@ -1961,7 +1982,8 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             if (contentView != null) {
                 if (Flags.homeScreenEditImprovements()
                         && ((ItemInfo) child.getTag()).itemType == ITEM_TYPE_APPWIDGET
-                        && mDragController instanceof LauncherDragController dragController) {
+                        && mDragController instanceof LauncherDragController dragController
+                        && !WorkspaceFreeMode.isEnabled(mLauncher)) {
                     dragOptions.deferDragToPreDragEnd = true;
                     dragOptions.preDragEndScale = (contentView.getMeasuredWidth()
                             + dragController.getWidgetDragScalePx(null, contentView, dragObject))
@@ -1982,7 +2004,8 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                 if (Flags.homeScreenEditImprovements()
                         && child.getTag() instanceof ItemInfo childItemInfo
                         && childItemInfo.itemType == ITEM_TYPE_APPWIDGET
-                        && mDragController instanceof LauncherDragController dragController) {
+                        && mDragController instanceof LauncherDragController dragController
+                        && !WorkspaceFreeMode.isEnabled(mLauncher)) {
                     dragOptions.preDragEndScale = (drawable.getIntrinsicWidth()
                             + dragController.getWidgetDragScalePx(drawable, null, dragObject))
                             / drawable.getIntrinsicWidth();
@@ -2064,16 +2087,35 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             mTargetCell = findNearestArea((int) mDragViewVisualCenter[0],
                     (int) mDragViewVisualCenter[1], minSpanX, minSpanY, dropTargetLayout,
                     mTargetCell);
-            float distance = dropTargetLayout.getDistanceFromWorkspaceCellVisualCenter(
-                    mDragViewVisualCenter[0], mDragViewVisualCenter[1], mTargetCell);
-            if (mCreateUserFolderOnDrop && willCreateUserFolder(d.dragInfo,
-                    dropTargetLayout, mTargetCell, distance, true)) {
-                return true;
-            }
+            if (WorkspaceFreeMode.isActive(dropTargetLayout)) {
+                View dropOver = WorkspaceFreeMode.findDropOverView(dropTargetLayout,
+                        mDragViewVisualCenter[0], mDragViewVisualCenter[1],
+                        mDragInfo != null ? mDragInfo.cell : null);
+                float distance = dropOver == null ? Float.MAX_VALUE
+                        : WorkspaceFreeMode.distanceToViewCenter(dropTargetLayout, dropOver,
+                                mDragViewVisualCenter);
+                if (mCreateUserFolderOnDrop && willCreateUserFolder(d.dragInfo, dropOver, true)
+                        && distance <= WorkspaceFreeMode.folderCreationRadius(dropTargetLayout,
+                                dropOver)) {
+                    return true;
+                }
+                if (mAddToExistingFolderOnDrop && willAddToExistingUserFolder(d.dragInfo, dropOver)
+                        && distance <= WorkspaceFreeMode.folderCreationRadius(dropTargetLayout,
+                                dropOver)) {
+                    return true;
+                }
+            } else {
+                float distance = dropTargetLayout.getDistanceFromWorkspaceCellVisualCenter(
+                        mDragViewVisualCenter[0], mDragViewVisualCenter[1], mTargetCell);
+                if (mCreateUserFolderOnDrop && willCreateUserFolder(d.dragInfo,
+                        dropTargetLayout, mTargetCell, distance, true)) {
+                    return true;
+                }
 
-            if (mAddToExistingFolderOnDrop && willAddToExistingUserFolder(d.dragInfo,
-                    dropTargetLayout, mTargetCell, distance)) {
-                return true;
+                if (mAddToExistingFolderOnDrop && willAddToExistingUserFolder(d.dragInfo,
+                        dropTargetLayout, mTargetCell, distance)) {
+                    return true;
+                }
             }
 
             int[] resultSpan = new int[2];
@@ -2170,15 +2212,22 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             int[] targetCell, float distance, boolean external, DragObject d) {
         if (distance > target.getFolderCreationRadius(targetCell)) return false;
         View v = target.getChildAt(targetCell[0], targetCell[1]);
+        return createUserFolderIfNecessary(newView, container, target, v, distance, external, d);
+    }
 
-        boolean hasntMoved = false;
-        if (mDragInfo != null) {
-            CellLayout cellParent = getParentCellLayoutForView(mDragInfo.cell);
-            hasntMoved = (mDragInfo.cellX == targetCell[0] &&
-                    mDragInfo.cellY == targetCell[1]) && (cellParent == target);
-        }
+    boolean createUserFolderIfNecessary(View newView, int container, CellLayout target, View v,
+            float distance, boolean external, DragObject d) {
+        if (v == null) return false;
+        CellLayoutLayoutParams destLp = (CellLayoutLayoutParams) v.getLayoutParams();
+        int[] targetCell = new int[]{destLp.getCellX(), destLp.getCellY()};
+        float folderRadius = WorkspaceFreeMode.isActive(target)
+                ? WorkspaceFreeMode.folderCreationRadius(target, v)
+                : target.getFolderCreationRadius(targetCell);
+        if (distance > folderRadius) return false;
 
-        if (v == null || hasntMoved || !mCreateUserFolderOnDrop) return false;
+        boolean hasntMoved = mDragInfo != null && v == mDragInfo.cell;
+
+        if (hasntMoved || !mCreateUserFolderOnDrop) return false;
         mCreateUserFolderOnDrop = false;
         final int screenId = getCellLayoutId(target);
 
@@ -2188,6 +2237,15 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         if (aboveShortcut && willBecomeShortcut) {
             ItemInfo sourceInfo = (ItemInfo) newView.getTag();
             ItemInfo destInfo = (ItemInfo) v.getTag();
+            int destFreeX = destInfo.freeX;
+            int destFreeY = destInfo.freeY;
+            boolean destHadFree = destInfo.hasFreePosition();
+            if (!destHadFree && WorkspaceFreeMode.isActive(target)) {
+                WorkspaceFreeMode.setFromView(destInfo, v);
+                destFreeX = destInfo.freeX;
+                destFreeY = destInfo.freeY;
+                destHadFree = destInfo.hasFreePosition();
+            }
             // if the drag started here, we need to remove it from the workspace
             if (!external) {
                 getParentCellLayoutForView(mDragInfo.cell).removeView(mDragInfo.cell);
@@ -2200,6 +2258,17 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                     .log(LauncherEvent.LAUNCHER_ITEM_DROP_FOLDER_CREATED);
             FolderIcon fi = mLauncher.addFolder(target, container, screenId, targetCell[0],
                     targetCell[1]);
+            ItemInfo folderInfo = (ItemInfo) fi.getTag();
+            if (destHadFree) {
+                folderInfo.freeX = destFreeX;
+                folderInfo.freeY = destFreeY;
+            }
+            if (WorkspaceFreeMode.isActive(target)) {
+                WorkspaceFreeMode.bringDroppedToFront(target, fi);
+            }
+            if (destHadFree || WorkspaceFreeMode.isActive(target)) {
+                mLauncher.getModelWriter().updateItemInDatabase(folderInfo);
+            }
             destInfo.cellX = -1;
             destInfo.cellY = -1;
             sourceInfo.cellX = -1;
@@ -2226,8 +2295,19 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
     boolean addToExistingFolderIfNecessary(View newView, CellLayout target, int[] targetCell,
             float distance, DragObject d, boolean external) {
         if (distance > target.getFolderCreationRadius(targetCell)) return false;
-
         View dropOverView = target.getChildAt(targetCell[0], targetCell[1]);
+        return addToExistingFolderIfNecessary(newView, target, dropOverView, distance, d, external);
+    }
+
+    boolean addToExistingFolderIfNecessary(View newView, CellLayout target, View dropOverView,
+            float distance, DragObject d, boolean external) {
+        if (dropOverView == null) return false;
+        CellLayoutLayoutParams lp = (CellLayoutLayoutParams) dropOverView.getLayoutParams();
+        int[] targetCell = new int[]{lp.getCellX(), lp.getCellY()};
+        float folderRadius = WorkspaceFreeMode.isActive(target)
+                ? WorkspaceFreeMode.folderCreationRadius(target, dropOverView)
+                : target.getFolderCreationRadius(targetCell);
+        if (distance > folderRadius) return false;
         if (!mAddToExistingFolderOnDrop) return false;
         mAddToExistingFolderOnDrop = false;
 
@@ -2354,15 +2434,29 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
 
                 mTargetCell = findNearestArea((int) mDragViewVisualCenter[0], (int)
                         mDragViewVisualCenter[1], spanX, spanY, dropTargetLayout, mTargetCell);
-                float distance = dropTargetLayout.getDistanceFromWorkspaceCellVisualCenter(
-                        mDragViewVisualCenter[0], mDragViewVisualCenter[1], mTargetCell);
-
-                // If the item being dropped is a shortcut and the nearest drop
-                // cell also contains a shortcut, then create a folder with the two shortcuts.
-                if (createUserFolderIfNecessary(cell, container, dropTargetLayout, mTargetCell,
-                        distance, false, d)
-                        || addToExistingFolderIfNecessary(cell, dropTargetLayout, mTargetCell,
-                        distance, d, false)) {
+                boolean freeLayout = WorkspaceFreeMode.isActive(dropTargetLayout)
+                        && !hasMovedIntoHotseat;
+                boolean createdOrAddedToFolder;
+                if (freeLayout) {
+                    View dropOver = WorkspaceFreeMode.findDropOverView(dropTargetLayout,
+                            mDragViewVisualCenter[0], mDragViewVisualCenter[1], cell);
+                    float distance = dropOver == null ? Float.MAX_VALUE
+                            : WorkspaceFreeMode.distanceToViewCenter(dropTargetLayout, dropOver,
+                                    mDragViewVisualCenter);
+                    createdOrAddedToFolder = dropOver != null
+                            && (createUserFolderIfNecessary(cell, container, dropTargetLayout,
+                                    dropOver, distance, false, d)
+                            || addToExistingFolderIfNecessary(cell, dropTargetLayout, dropOver,
+                                    distance, d, false));
+                } else {
+                    float distance = dropTargetLayout.getDistanceFromWorkspaceCellVisualCenter(
+                            mDragViewVisualCenter[0], mDragViewVisualCenter[1], mTargetCell);
+                    createdOrAddedToFolder = createUserFolderIfNecessary(cell, container,
+                            dropTargetLayout, mTargetCell, distance, false, d)
+                            || addToExistingFolderIfNecessary(cell, dropTargetLayout, mTargetCell,
+                            distance, d, false);
+                }
+                if (createdOrAddedToFolder) {
                     if (!mLauncher.isInState(EDIT_MODE)) {
                         mLauncher.getStateManager().goToState(NORMAL, SPRING_LOADED_EXIT_DELAY);
                     }
@@ -2388,7 +2482,8 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
 
                 // When quickly moving an item, a user may accidentally rearrange their
                 // workspace. So instead we move the icon back safely to its original position.
-                boolean returnToOriginalCellToPreventShuffling = !isFinishedSwitchingState()
+                boolean returnToOriginalCellToPreventShuffling = !freeLayout
+                        && !isFinishedSwitchingState()
                         && !droppedOnOriginalCellDuringTransition && !dropTargetLayout
                         .isRegionVacant(mTargetCell[0], mTargetCell[1], spanX, spanY);
                 int[] resultSpan = new int[2];
@@ -2398,6 +2493,15 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                     mTargetCell = dropTargetLayout.performReorder((int) mDragViewVisualCenter[0],
                             (int) mDragViewVisualCenter[1], minSpanX, minSpanY, spanX, spanY,
                             cell, mTargetCell, resultSpan, CellLayout.MODE_ON_DROP);
+                }
+                if (freeLayout) {
+                    WorkspaceFreeMode.setFromVisualCenter(item, dropTargetLayout,
+                            mDragViewVisualCenter[0], mDragViewVisualCenter[1], spanX, spanY,
+                            cell);
+                    mTargetCell[0] = item.cellX;
+                    mTargetCell[1] = item.cellY;
+                } else {
+                    item.clearFreePosition();
                 }
 
                 boolean foundCell = mTargetCell[0] >= 0 && mTargetCell[1] >= 0;
@@ -2422,6 +2526,18 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                         snappedToNewPage = true;
                     }
                     final ItemInfo info = (ItemInfo) cell.getTag();
+                    if (info != item) {
+                        info.freeX = item.freeX;
+                        info.freeY = item.freeY;
+                    }
+                    if (freeLayout
+                            && cell.getLayoutParams() instanceof CellLayoutLayoutParams curLp
+                            && curLp.cellHSpan > 0 && curLp.cellVSpan > 0) {
+                        item.spanX = curLp.cellHSpan;
+                        item.spanY = curLp.cellVSpan;
+                        info.spanX = curLp.cellHSpan;
+                        info.spanY = curLp.cellVSpan;
+                    }
                     if (hasMovedLayouts) {
                         // Reparent the view
                         CellLayout parentCell = getParentCellLayoutForView(cell);
@@ -2434,6 +2550,9 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                         }
                         addInScreen(cell, container, screenId, mTargetCell[0], mTargetCell[1],
                                 info.spanX, info.spanY);
+                    }
+                    if (freeLayout) {
+                        WorkspaceFreeMode.bringDroppedToFront(dropTargetLayout, cell);
                     }
 
                     // update the item's position after drop
@@ -2803,22 +2922,41 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
 
             setCurrentDropOverCell(mTargetCell[0], mTargetCell[1]);
 
-            float targetCellDistance = mDragTargetLayout.getDistanceFromWorkspaceCellVisualCenter(
-                    mDragViewVisualCenter[0], mDragViewVisualCenter[1], mTargetCell);
+            if (WorkspaceFreeMode.isActive(mDragTargetLayout)) {
+                View dropOver = WorkspaceFreeMode.findDropOverView(mDragTargetLayout,
+                        mDragViewVisualCenter[0], mDragViewVisualCenter[1], child);
+                float targetCellDistance = dropOver == null ? Float.MAX_VALUE
+                        : WorkspaceFreeMode.distanceToViewCenter(mDragTargetLayout, dropOver,
+                                mDragViewVisualCenter);
+                if (dropOver != null) {
+                    CellLayoutLayoutParams dropLp =
+                            (CellLayoutLayoutParams) dropOver.getLayoutParams();
+                    mTargetCell[0] = dropLp.getCellX();
+                    mTargetCell[1] = dropLp.getCellY();
+                }
+                manageFolderFeedback(targetCellDistance, d, dropOver);
+                mDragTargetLayout.revertTempState();
+                if (mDragMode != DRAG_MODE_CREATE_FOLDER && mDragMode != DRAG_MODE_ADD_TO_FOLDER) {
+                    mDragTargetLayout.clearDragOutlines();
+                }
+            } else {
+                float targetCellDistance = mDragTargetLayout.getDistanceFromWorkspaceCellVisualCenter(
+                        mDragViewVisualCenter[0], mDragViewVisualCenter[1], mTargetCell);
 
-            manageFolderFeedback(targetCellDistance, d);
+                manageFolderFeedback(targetCellDistance, d);
 
-            boolean nearestDropOccupied = mDragTargetLayout.isNearestDropLocationOccupied((int)
-                            mDragViewVisualCenter[0], (int) mDragViewVisualCenter[1], item.spanX,
-                    item.spanY, child, mTargetCell);
+                boolean nearestDropOccupied = mDragTargetLayout.isNearestDropLocationOccupied((int)
+                                mDragViewVisualCenter[0], (int) mDragViewVisualCenter[1], item.spanX,
+                        item.spanY, child, mTargetCell);
 
-            manageReorderOnDragOver(d, targetCellDistance, nearestDropOccupied, minSpanX, minSpanY,
-                    reorderX, reorderY);
+                manageReorderOnDragOver(d, targetCellDistance, nearestDropOccupied, minSpanX,
+                        minSpanY, reorderX, reorderY);
 
-            if (mDragMode == DRAG_MODE_CREATE_FOLDER || mDragMode == DRAG_MODE_ADD_TO_FOLDER ||
-                    !nearestDropOccupied) {
-                if (mDragTargetLayout != null) {
-                    mDragTargetLayout.revertTempState();
+                if (mDragMode == DRAG_MODE_CREATE_FOLDER || mDragMode == DRAG_MODE_ADD_TO_FOLDER ||
+                        !nearestDropOccupied) {
+                    if (mDragTargetLayout != null) {
+                        mDragTargetLayout.revertTempState();
+                    }
                 }
             }
         }
@@ -2952,6 +3090,34 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                 return layout;
             }
         }
+        // Full-size pages do not overlap; edge hover still feeds SpringLoadedDragController.
+        if (WorkspaceFreeMode.isEnabled(mLauncher)) {
+            return getFreeModeEdgePage(d, centerX);
+        }
+        return null;
+    }
+
+    private CellLayout getFreeModeEdgePage(DragObject d, float centerX) {
+        int nextPage = getNextPage();
+        int width = getMeasuredWidth();
+        if (width <= 0) {
+            return null;
+        }
+        int edge = Utilities.dpToPx(40);
+        int scroll = getScrollX();
+        int step = isTwoPanelEnabled() ? 2 : 1;
+        int page = -1;
+        if (Math.min(d.x, centerX) <= scroll + edge) {
+            page = mIsRtl ? nextPage + step : nextPage - step;
+        } else if (Math.max(d.x, centerX) >= scroll + width - edge) {
+            page = mIsRtl ? nextPage - step : nextPage + step;
+        }
+        if (page >= 0 && page < getPageCount()) {
+            CellLayout cl = (CellLayout) getPageAt(page);
+            if (d.y >= cl.getTop() && d.y <= cl.getBottom()) {
+                return cl;
+            }
+        }
         return null;
     }
 
@@ -2982,7 +3148,15 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
     }
 
     private void manageFolderFeedback(float distance, DragObject dragObject) {
-        if (distance > mDragTargetLayout.getFolderCreationRadius(mTargetCell)) {
+        manageFolderFeedback(distance, dragObject, mDragTargetLayout.getChildAt(
+                mTargetCell[0], mTargetCell[1]));
+    }
+
+    private void manageFolderFeedback(float distance, DragObject dragObject, View dropOverView) {
+        float folderRadius = WorkspaceFreeMode.isActive(mDragTargetLayout)
+                ? WorkspaceFreeMode.folderCreationRadius(mDragTargetLayout, dropOverView)
+                : mDragTargetLayout.getFolderCreationRadius(mTargetCell);
+        if (distance > folderRadius) {
             if ((mDragMode == DRAG_MODE_ADD_TO_FOLDER
                     || mDragMode == DRAG_MODE_CREATE_FOLDER)) {
                 setDragMode(DRAG_MODE_NONE);
@@ -2990,7 +3164,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             return;
         }
 
-        mDragOverView = mDragTargetLayout.getChildAt(mTargetCell[0], mTargetCell[1]);
+        mDragOverView = dropOverView;
         ItemInfo info = dragObject.dragInfo;
         boolean userFolderPending = willCreateUserFolder(info, mDragOverView, false);
         if (mDragMode == DRAG_MODE_NONE && userFolderPending) {
@@ -3009,6 +3183,10 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             }
 
             mFolderCreateBg.animateToAccept(mDragTargetLayout, mTargetCell[0], mTargetCell[1]);
+            if (WorkspaceFreeMode.isActive(mDragTargetLayout)) {
+                WorkspaceFreeMode.alignFolderPreview(mFolderCreateBg, mDragTargetLayout,
+                        mDragOverView);
+            }
             mDragTargetLayout.clearDragOutlines();
             setDragMode(DRAG_MODE_CREATE_FOLDER);
 
@@ -3033,6 +3211,10 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                         mDragOverView.getMeasuredWidth(), mDragOverView.getPaddingTop());
                 mFolderAddBg.isClipping = false;
                 mFolderAddBg.animateToAccept(mDragTargetLayout, mTargetCell[0], mTargetCell[1]);
+                if (WorkspaceFreeMode.isActive(mDragTargetLayout)) {
+                    WorkspaceFreeMode.alignFolderPreview(mFolderAddBg, mDragTargetLayout,
+                            mDragOverView);
+                }
             }
 
             if (mDragTargetLayout != null) {
@@ -3193,6 +3375,14 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                 item.spanX = resultSpan[0];
                 item.spanY = resultSpan[1];
             }
+            if (WorkspaceFreeMode.isActive(cellLayout)) {
+                WorkspaceFreeMode.setFromVisualCenter(item, cellLayout,
+                        mDragViewVisualCenter[0], mDragViewVisualCenter[1],
+                        item.spanX, item.spanY, null);
+                mTargetCell[0] = item.cellX;
+                mTargetCell[1] = item.cellY;
+                item.rank = WorkspaceFreeMode.nextDesktopRank(cellLayout);
+            }
 
             Runnable onAnimationCompleteRunnable = new Runnable() {
                 @Override
@@ -3238,28 +3428,55 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
 
             // First we find the cell nearest to point at which the item is
             // dropped, without any consideration to whether there is an item there.
+            boolean freeLayout = WorkspaceFreeMode.isActive(cellLayout);
             if (touchXY != null) {
                 mTargetCell = findNearestArea(touchXY[0], touchXY[1], spanX, spanY,
                         cellLayout, mTargetCell);
-                float distance = cellLayout.getDistanceFromWorkspaceCellVisualCenter(
-                        mDragViewVisualCenter[0], mDragViewVisualCenter[1], mTargetCell);
-                if (createUserFolderIfNecessary(view, container, cellLayout, mTargetCell, distance,
-                        true, d)) {
-                    return;
-                }
-                if (addToExistingFolderIfNecessary(view, cellLayout, mTargetCell, distance, d,
-                        true)) {
-                    return;
+                if (freeLayout) {
+                    View dropOver = WorkspaceFreeMode.findDropOverView(cellLayout,
+                            mDragViewVisualCenter[0], mDragViewVisualCenter[1], view);
+                    float distance = dropOver == null ? Float.MAX_VALUE
+                            : WorkspaceFreeMode.distanceToViewCenter(cellLayout, dropOver,
+                                    mDragViewVisualCenter);
+                    if (dropOver != null
+                            && (createUserFolderIfNecessary(view, container, cellLayout, dropOver,
+                                    distance, true, d)
+                            || addToExistingFolderIfNecessary(view, cellLayout, dropOver, distance,
+                                    d, true))) {
+                        return;
+                    }
+                } else {
+                    float distance = cellLayout.getDistanceFromWorkspaceCellVisualCenter(
+                            mDragViewVisualCenter[0], mDragViewVisualCenter[1], mTargetCell);
+                    if (createUserFolderIfNecessary(view, container, cellLayout, mTargetCell,
+                            distance, true, d)) {
+                        return;
+                    }
+                    if (addToExistingFolderIfNecessary(view, cellLayout, mTargetCell, distance, d,
+                            true)) {
+                        return;
+                    }
                 }
             }
 
-            if (touchXY != null) {
+            if (freeLayout && touchXY != null) {
+                WorkspaceFreeMode.setFromVisualCenter(info, cellLayout,
+                        mDragViewVisualCenter[0], mDragViewVisualCenter[1],
+                        info.spanX, info.spanY, view);
+                mTargetCell[0] = info.cellX;
+                mTargetCell[1] = info.cellY;
+                info.rank = WorkspaceFreeMode.nextDesktopRank(cellLayout);
+            } else if (touchXY != null) {
                 // when dragging and dropping, just find the closest free spot
                 mTargetCell = cellLayout.performReorder((int) mDragViewVisualCenter[0],
                         (int) mDragViewVisualCenter[1], 1, 1, 1, 1,
                         null, mTargetCell, null, CellLayout.MODE_ON_DROP_EXTERNAL);
+                info.clearFreePosition();
             } else {
                 cellLayout.findCellForSpan(mTargetCell, 1, 1);
+                if (!freeLayout) {
+                    info.clearFreePosition();
+                }
             }
             // Add the item to DB before adding to screen ensures that the container and other
             // values of the info is properly updated.
@@ -3268,8 +3485,20 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
 
             addInScreen(view, container, screenId, mTargetCell[0], mTargetCell[1],
                     info.spanX, info.spanY);
+            if (freeLayout) {
+                WorkspaceFreeMode.bringDroppedToFront(cellLayout, view);
+            }
             cellLayout.onDropChild(view);
-            cellLayout.getShortcutsAndWidgets().measureChild(view);
+            if (freeLayout && touchXY != null) {
+                cellLayout.getShortcutsAndWidgets().measureChild(view);
+                WorkspaceFreeMode.setFromVisualCenter(info, cellLayout,
+                        mDragViewVisualCenter[0], mDragViewVisualCenter[1],
+                        info.spanX, info.spanY, view);
+                cellLayout.getShortcutsAndWidgets().measureChild(view);
+                mLauncher.getModelWriter().updateItemInDatabase(info);
+            } else {
+                cellLayout.getShortcutsAndWidgets().measureChild(view);
+            }
 
             if (d.dragView != null) {
                 // We wrap the animation call in the temporary set and reset of the current
@@ -3359,6 +3588,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         int spanY = info.spanY;
 
         Rect r = estimateItemPosition(layout, targetCell[0], targetCell[1], spanX, spanY);
+        WorkspaceFreeMode.shiftDropRectToFreePosition(layout, info, r);
         if (info.itemType == LauncherSettings.Favorites.ITEM_TYPE_APPWIDGET) {
             DeviceProfile profile = mLauncher.getDeviceProfile();
             if (finalView instanceof NavigableAppWidgetHostView) {

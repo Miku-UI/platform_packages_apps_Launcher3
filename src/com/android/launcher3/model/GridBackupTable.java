@@ -68,8 +68,10 @@ public class GridBackupTable {
      * Copy valid grid entries from one table to another.
      */
     private static void copyTable(SQLiteDatabase db, String from, String to, long userSerial) {
+        Favorites.ensureFreePositionColumns(db, from);
         dropTable(db, to);
         Favorites.addTableToDb(db, userSerial, false, to);
-        db.execSQL("INSERT INTO " + to + " SELECT * FROM " + from);
+        db.execSQL("INSERT INTO " + to + " SELECT " + Favorites.getColumns(userSerial)
+                + " FROM " + from);
     }
 }

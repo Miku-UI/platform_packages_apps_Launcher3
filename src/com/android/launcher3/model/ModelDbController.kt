@@ -38,6 +38,7 @@ import com.android.launcher3.LauncherPrefs
 import com.android.launcher3.LauncherPrefs.Companion.backedUpItem
 import com.android.launcher3.LauncherPrefs.Companion.get
 import com.android.launcher3.LauncherSettings.Favorites
+import com.android.launcher3.WorkspaceFreeMode
 import com.android.launcher3.LauncherSettings.Favorites.*
 import com.android.launcher3.backuprestore.LauncherRestoreEventLogger
 import com.android.launcher3.backuprestore.LauncherRestoreEventLogger.RestoreError.Companion.GRID_MIGRATION_FAILURE
@@ -75,15 +76,78 @@ internal constructor(
 
     private lateinit var openHelper: DatabaseHelper
 
+    val databaseName: String
+        @Synchronized
+        get() {
+            createDbIfNotExists()
+            return openHelper.databaseName
+        }
+
     @Synchronized
     private fun createDbIfNotExists() {
         if (!::openHelper.isInitialized) {
             // Initialize the restore task before opening the DB
             val restoreTask = RestoreDbTask.createRestoreTask(context)
-            val dbFile = prefs.get(LauncherPrefs.DB_FILE).ifEmpty { idp.dbFile }
-            openHelper = createDatabaseHelper(forMigration = false, dbFile)
+            openHelper = openActiveStoreLocked()
             restoreTask.accept(this)
         }
+    }
+
+    private fun gridDbFile(): String = prefs.get(LauncherPrefs.DB_FILE).ifEmpty { idp.dbFile }
+
+    private fun resolveActiveDbFile(gridDb: String = gridDbFile()): String =
+        if (WorkspaceFreeMode.isEnabled(context)) WorkspaceFreeMode.freeDbName(gridDb) else gridDb
+
+    private fun openActiveStoreLocked(): DatabaseHelper {
+        val gridDb = gridDbFile()
+        val target = resolveActiveDbFile(gridDb)
+        if (
+            WorkspaceFreeMode.isEnabled(context) &&
+                !WorkspaceFreeMode.storeExists(context, target)
+        ) {
+            val original = createDatabaseHelper(forMigration = false, gridDb)
+            try {
+                WorkspaceFreeMode.copyStore(context, original.writableDatabase, target)
+            } catch (e: Exception) {
+                FileLog.e(TAG, "Failed to copy free-layout store", e)
+                return original
+            }
+            if (original.databaseName != target) {
+                original.close()
+            }
+        }
+        return createDatabaseHelper(forMigration = false, target)
+    }
+
+    /**
+     * Opens the grid or free-layout database matching the current preference. First enable copies
+     * the original store when the free store is missing.
+     */
+    @Synchronized
+    @WorkerThread
+    fun switchActiveStore() {
+        createDbIfNotExists()
+        val target = resolveActiveDbFile()
+        if (openHelper.databaseName == target) {
+            return
+        }
+        if (
+            WorkspaceFreeMode.isEnabled(context) &&
+                !WorkspaceFreeMode.storeExists(context, target)
+        ) {
+            try {
+                WorkspaceFreeMode.copyStore(context, openHelper.writableDatabase, target)
+            } catch (e: Exception) {
+                FileLog.e(TAG, "Failed to copy free-layout store", e)
+                return
+            }
+        }
+        val oldHelper = openHelper
+        openHelper = createDatabaseHelper(forMigration = false, target)
+        if (openHelper !== oldHelper) {
+            oldHelper.close()
+        }
+        FileLog.d(TAG, "Switched launcher store to ${openHelper.databaseName}")
     }
 
     private fun createDatabaseHelper(forMigration: Boolean, dbFile: String): DatabaseHelper {
@@ -182,7 +246,9 @@ internal constructor(
     @WorkerThread
     fun removeGhostWidgets() {
         createDbIfNotExists()
-        openHelper.removeGhostWidgets(openHelper.writableDatabase)
+        val extraValid =
+            WorkspaceFreeMode.widgetIdsInStore(context, WorkspaceFreeMode.otherDbName(openHelper.databaseName))
+        openHelper.removeGhostWidgets(openHelper.writableDatabase, extraValid)
     }
 
     /** Returns a new [SQLiteTransaction] */
@@ -214,7 +280,7 @@ internal constructor(
             FileLog.d(TAG, "isGridMigrationNecessary: no grid migration needed")
             return false
         }
-        val targetDbName = DeviceGridState(idp).dbFile
+        val targetDbName = resolveActiveDbFile(DeviceGridState(idp).dbFile)
         val currentDbName = openHelper.databaseName
         if (TextUtils.equals(targetDbName, currentDbName)) {
             FileLog.e(
@@ -260,7 +326,8 @@ internal constructor(
                         isAfterRestore,
                     )
             ) {
-                openHelper = createDatabaseHelper(forMigration = true, destDeviceState.dbFile)
+                openHelper =
+                    createDatabaseHelper(forMigration = true, resolveActiveDbFile(destDeviceState.dbFile))
                 gridSizeMigrationLogic.migrateGrid(
                     srcDeviceState,
                     destDeviceState,
@@ -320,6 +387,18 @@ internal constructor(
         createDbIfNotExists()
 
         if (prefs.get(emptyDbCreatedKey)) {
+            if (WorkspaceFreeMode.isFreeDb(openHelper.databaseName)) {
+                val count =
+                    android.database.DatabaseUtils.queryNumEntries(
+                        openHelper.readableDatabase,
+                        Favorites.TABLE_NAME,
+                    )
+                if (count > 0) {
+                    FileLog.d(TAG, "Skip default workspace, free-layout store has $count items")
+                    clearFlagEmptyDbCreated()
+                    return false
+                }
+            }
             Log.d(TAG, "loading default workspace")
 
             val widgetHolder = openHelper.newLauncherWidgetHolder()

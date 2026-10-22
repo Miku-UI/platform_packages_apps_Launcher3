@@ -23,6 +23,8 @@ import com.android.launcher3.LauncherSettings.Favorites.APPWIDGET_PROVIDER
 import com.android.launcher3.LauncherSettings.Favorites.APPWIDGET_SOURCE
 import com.android.launcher3.LauncherSettings.Favorites.CELLX
 import com.android.launcher3.LauncherSettings.Favorites.CELLY
+import com.android.launcher3.LauncherSettings.Favorites.FREEX
+import com.android.launcher3.LauncherSettings.Favorites.FREEY
 import com.android.launcher3.LauncherSettings.Favorites.CONTAINER
 import com.android.launcher3.LauncherSettings.Favorites.ICON
 import com.android.launcher3.LauncherSettings.Favorites.INTENT
@@ -49,6 +51,8 @@ open class ModelCursorWrapper(cursor: Cursor, private val queriedColumns: Array<
     val container: Int by CONTAINER.delegateInt()
     val cellX: Int by CELLX.delegateInt()
     val cellY: Int by CELLY.delegateInt()
+    val freeX: Int by FREEX.delegateIntOrDefault(-1)
+    val freeY: Int by FREEY.delegateIntOrDefault(-1)
     val spanX: Int by SPANX.delegateInt()
     val spanY: Int by SPANY.delegateInt()
     val rank: Int by RANK.delegateInt()
@@ -72,6 +76,13 @@ open class ModelCursorWrapper(cursor: Cursor, private val queriedColumns: Array<
     val iconBlob: ByteArray? by ICON.delegate { getBlob(it) }
 
     private fun String.delegateInt() = delegate { getInt(it) }
+
+    private fun String.delegateIntOrDefault(default: Int) =
+        CursorProvider(
+            if (queriedColumns == null || queriedColumns.contains(this)) getColumnIndex(this)
+            else -1,
+            { idx -> if (idx < 0 || isNull(idx)) default else getInt(idx) },
+        )
 
     private fun String.delegateString() = delegate { getString(it) }
 

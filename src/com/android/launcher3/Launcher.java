@@ -1313,6 +1313,9 @@ public class Launcher extends StatefulActivity<LauncherState>
         launcherInfo.spanY = itemInfo.spanY;
         launcherInfo.minSpanX = itemInfo.minSpanX;
         launcherInfo.minSpanY = itemInfo.minSpanY;
+        launcherInfo.freeX = itemInfo.freeX;
+        launcherInfo.freeY = itemInfo.freeY;
+        launcherInfo.rank = itemInfo.rank;
         launcherInfo.user = appWidgetInfo.getProfile();
         CellPos presenterPos = getCellPosMapper().mapModelToPresenter(itemInfo);
         if (showPendingWidget) {
@@ -2058,12 +2061,23 @@ public class Launcher extends StatefulActivity<LauncherState>
         int newItemsScreenId = -1;
         int index = 0;
         View lastAddedView = null;
+        if (WorkspaceFreeMode.isEnabled(this) && shortcuts.size() > 1) {
+            ArrayList<Pair<ItemInfo, View>> ordered = new ArrayList<>(shortcuts);
+            Collections.sort(ordered, (a, b) -> {
+                int ra = a.first != null ? a.first.rank : 0;
+                int rb = b.first != null ? b.first.rank : 0;
+                return Integer.compare(ra, rb);
+            });
+            shortcuts = ordered;
+        }
         for (Pair<ItemInfo, View> e : shortcuts) {
             final ItemInfo item = e.first;
 
-            // Remove colliding items.
+            // Skip colliding items on the grid. Free layout stores several items in one cell.
             CellPos presenterPos = getCellPosMapper().mapModelToPresenter(item);
-            if (item.container == CONTAINER_DESKTOP) {
+            if (item.container == CONTAINER_DESKTOP
+                    && !WorkspaceFreeMode.isEnabled(this)
+                    && !item.hasFreePosition()) {
                 CellLayout cl = mWorkspace.getScreenWithId(presenterPos.screenId);
                 if (cl != null && cl.isOccupied(presenterPos.cellX, presenterPos.cellY)) {
                     View occupiedView = cl.getChildAt(presenterPos.cellX, presenterPos.cellY);

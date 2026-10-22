@@ -21,6 +21,8 @@ import android.graphics.Canvas
 abstract class DelegatedCellDrawing {
     @JvmField var mDelegateCellX = 0
     @JvmField var mDelegateCellY = 0
+    @JvmField var mDelegateShiftX = 0
+    @JvmField var mDelegateShiftY = 0
 
     /** Draw under CellLayout */
     abstract fun drawUnderItem(canvas: Canvas)

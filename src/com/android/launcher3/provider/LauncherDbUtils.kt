@@ -129,6 +129,7 @@ object LauncherDbUtils {
         context: Context,
     ) {
         val userSerial = UserCache.INSTANCE[context].getSerialNumberForUser(Process.myUserHandle())
+        LauncherSettings.Favorites.ensureFreePositionColumns(fromDb, fromTable)
         dropTable(toDb, toTable)
         LauncherSettings.Favorites.addTableToDb(toDb, userSerial, false, toTable)
         if (fromDb != toDb) {

@@ -26,6 +26,7 @@ import com.android.launcher3.CellLayout
 import com.android.launcher3.DeviceProfile
 import com.android.launcher3.R
 import com.android.launcher3.Workspace
+import com.android.launcher3.WorkspaceFreeMode
 import com.android.launcher3.celllayout.CellLayoutLayoutParams
 import com.android.launcher3.celllayout.CellPosMapper
 import com.android.launcher3.dagger.LauncherComponentProvider.appComponent
@@ -104,15 +105,17 @@ class ResizeManager(
     }
 
     private fun initializeWidgetViewForResize(widgetInfo: ItemInfo) {
-        val presenterPos = cellPosMapper.mapModelToPresenter(widgetInfo)
-        (this.widgetView.layoutParams as CellLayoutLayoutParams).apply {
-            cellX = presenterPos.cellX
-            tmpCellX = presenterPos.cellX
-            cellY = presenterPos.cellY
-            tmpCellY = presenterPos.cellY
-            cellHSpan = widgetInfo.spanX
-            cellVSpan = widgetInfo.spanY
-            isLockedToGrid = true
+        if (!WorkspaceFreeMode.isActive(cellLayout)) {
+            val presenterPos = cellPosMapper.mapModelToPresenter(widgetInfo)
+            (this.widgetView.layoutParams as CellLayoutLayoutParams).apply {
+                cellX = presenterPos.cellX
+                tmpCellX = presenterPos.cellX
+                cellY = presenterPos.cellY
+                tmpCellY = presenterPos.cellY
+                cellHSpan = widgetInfo.spanX
+                cellVSpan = widgetInfo.spanY
+                isLockedToGrid = true
+            }
         }
 
         // When we create the resize frame, we first mark all cells as unoccupied. The appropriate

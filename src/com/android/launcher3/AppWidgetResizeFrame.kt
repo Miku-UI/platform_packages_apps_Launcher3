@@ -239,6 +239,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         dragLayer: DragLayer,
     ) {
         fun initializeWidgetViewLayoutParams(widgetInfo: ItemInfo) {
+            if (WorkspaceFreeMode.isActive(cellLayout)) {
+                return
+            }
             val presenterPos = launcher.cellPosMapper.mapModelToPresenter(widgetInfo)
             (this.widgetView.layoutParams as CellLayoutLayoutParams).apply {
                 cellX = presenterPos.cellX

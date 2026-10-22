@@ -387,6 +387,8 @@ public class PreviewBackground extends DelegatedCellDrawing {
         mDrawingDelegate = delegate;
         mDelegateCellX = cellX;
         mDelegateCellY = cellY;
+        mDelegateShiftX = 0;
+        mDelegateShiftY = 0;
 
         invalidate();
     }

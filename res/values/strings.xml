@@ -437,6 +437,11 @@
     <!-- Text description of the setting that allows the automatic placement of launcher shortcuts for applications and games installed on the device [CHAR LIMIT=NONE] -->
     <string name="auto_add_shortcuts_description">For new apps</string>
 
+    <!-- Title for the setting that disables home screen grid snapping [CHAR LIMIT=40] -->
+    <string name="workspace_free_mode_title">Free layout</string>
+    <!-- Description for free layout: widgets and icons can be placed anywhere [CHAR LIMIT=NONE] -->
+    <string name="workspace_free_mode_description">Place widgets and home screen icons anywhere, without snapping to the grid</string>
+
     <!-- Label on an icon that references an uninstalled package, for which we have no information about when it might be installed. [CHAR_LIMIT=15] -->
     <string name="package_state_unknown">Unknown</string>
 

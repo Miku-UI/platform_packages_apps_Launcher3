@@ -21,9 +21,12 @@ import static android.util.Base64.NO_WRAP;
 
 import static com.android.launcher3.icons.cache.CacheLookupFlag.DEFAULT_LOOKUP_FLAG;
 
+import android.database.Cursor;
+import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.provider.BaseColumns;
 import android.util.Base64;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -274,6 +277,18 @@ public class LauncherSettings {
         public static final String CELLY = "cellY";
 
         /**
+         * Free-layout X as 0–10000 of the page width, or -1 if unset.
+         * <P>Type: INTEGER</P>
+         */
+        public static final String FREEX = "freeX";
+
+        /**
+         * Free-layout Y as 0–10000 of the page height, or -1 if unset.
+         * <P>Type: INTEGER</P>
+         */
+        public static final String FREEY = "freeY";
+
+        /**
          * The X span of the cell holding the favorite
          * <P>Type: INTEGER</P>
          */
@@ -341,6 +356,50 @@ public class LauncherSettings {
                     + getJoinedColumnsToTypes(myProfileId) + ");");
         }
 
+        /**
+         * Adds free-layout columns to an existing favorites-style table without bumping schema.
+         */
+        public static void ensureFreePositionColumns(SQLiteDatabase db, String tableName) {
+            if (!tableExists(db, tableName)) {
+                return;
+            }
+            ensureIntegerColumn(db, tableName, FREEX, -1);
+            ensureIntegerColumn(db, tableName, FREEY, -1);
+        }
+
+        private static boolean tableExists(SQLiteDatabase db, String tableName) {
+            try (Cursor c = db.rawQuery(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                    new String[]{tableName})) {
+                return c.moveToFirst();
+            }
+        }
+
+        private static boolean hasColumn(SQLiteDatabase db, String tableName, String column) {
+            try (Cursor c = db.rawQuery("PRAGMA table_info(" + tableName + ")", null)) {
+                int nameIndex = c.getColumnIndex("name");
+                while (c.moveToNext()) {
+                    if (column.equalsIgnoreCase(c.getString(nameIndex))) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private static void ensureIntegerColumn(SQLiteDatabase db, String tableName,
+                String column, int defaultValue) {
+            if (hasColumn(db, tableName, column)) {
+                return;
+            }
+            try {
+                db.execSQL("ALTER TABLE " + tableName + " ADD COLUMN " + column
+                        + " INTEGER NOT NULL DEFAULT " + defaultValue);
+            } catch (SQLException e) {
+                Log.e("LauncherSettings", "Failed to add column " + column + " to " + tableName, e);
+            }
+        }
+
         // LinkedHashMap maintains Order of Insertion
         @NonNull
         public static LinkedHashMap<String, String> getColumnsToTypes(long profileId) {
@@ -352,6 +411,8 @@ public class LauncherSettings {
             columnsToTypes.put(SCREEN, "INTEGER");
             columnsToTypes.put(CELLX, "INTEGER");
             columnsToTypes.put(CELLY, "INTEGER");
+            columnsToTypes.put(FREEX, "INTEGER NOT NULL DEFAULT -1");
+            columnsToTypes.put(FREEY, "INTEGER NOT NULL DEFAULT -1");
             columnsToTypes.put(SPANX, "INTEGER");
             columnsToTypes.put(SPANY, "INTEGER");
             columnsToTypes.put(ITEM_TYPE, "INTEGER");
