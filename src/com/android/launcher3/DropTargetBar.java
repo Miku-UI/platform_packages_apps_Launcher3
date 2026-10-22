@@ -333,7 +333,7 @@ public class DropTargetBar extends FrameLayout
      */
     @Override
     public void onDragStart(DropTarget.DragObject dragObject, DragOptions options) {
-        animateToVisibility(true);
+        animateToVisibility(!WorkspaceFreeMode.isEnabled(mLauncher));
     }
 
     /**
