@@ -18,6 +18,7 @@ package com.android.launcher3.views;
 import static android.view.Gravity.LEFT;
 
 import static com.android.app.animation.Interpolators.LINEAR;
+import static com.android.launcher3.Utilities.boundToRange;
 import static com.android.launcher3.Utilities.mapToRange;
 import static com.android.launcher3.graphics.PreloadIconDelegate.newPendingIcon;
 import static com.android.launcher3.icons.BitmapInfo.FLAG_CUSTOM_SHAPE;
@@ -37,6 +38,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver.OnGlobalLayoutListener;
+
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
@@ -48,6 +50,7 @@ import com.android.launcher3.BubbleTextView;
 import com.android.launcher3.DeviceProfile;
 import com.android.launcher3.InsettableFrameLayout;
 import com.android.launcher3.Launcher;
+import com.android.launcher3.WorkspaceFreeMode;
 import com.android.launcher3.R;
 import com.android.launcher3.Utilities;
 import com.android.launcher3.dragndrop.DragLayer;
@@ -103,6 +106,9 @@ public class FloatingIconView extends FrameLayout implements
 
     private View mOriginalIcon;
     private RectF mPositionOut;
+    /** Resting rotation of a free-layout icon, degrees. Shared with the window matrix. */
+    private float mFreeIconRotation;
+    private boolean mHasFreeIconTransform;
     private Runnable mOnTargetChangeRunnable;
 
     private final Rect mFinalDrawableBounds = new Rect();
@@ -173,6 +179,9 @@ public class FloatingIconView extends FrameLayout implements
         setAlpha(isLaidOut() || taskViewDrawAlpha < 255 ? alpha : 0f);
         mClipIconView.update(rect, progress, shapeProgressStart, cornerRadius, isOpening, this,
                 mLauncher.getDeviceProfile(), taskViewDrawAlpha);
+        if (mHasFreeIconTransform && getScaleX() != 0f) {
+            applyFreeIconRotation(rect, getDrawRotation(progress, isOpening));
+        }
 
         // The alpha goes from 1 to 0 when progress is 0 and 0.15 respectively.
         // This value minimizes view display time while still allowing the view to fade out.
@@ -212,16 +221,63 @@ public class FloatingIconView extends FrameLayout implements
      */
     private void matchPositionOf(Launcher launcher, View v, boolean isOpening, RectF positionOut) {
         getLocationBoundsForView(launcher, v, isOpening, positionOut);
+        mFreeIconRotation = 0f;
+        mHasFreeIconTransform = false;
+        if (v != null && v.getTag() instanceof ItemInfo info
+                && WorkspaceFreeMode.hasIconTransform(info)) {
+            mHasFreeIconTransform = true;
+            mFreeIconRotation = info.freeRotation;
+        }
         final InsettableFrameLayout.LayoutParams lp = new InsettableFrameLayout.LayoutParams(
                 Math.round(positionOut.width()),
                 Math.round(positionOut.height()));
         updatePosition(positionOut, lp);
         setLayoutParams(lp);
-
         // For code simplicity, we always layout the child views using Gravity.LEFT
         // and manually handle RTL for FloatingIconView when positioning it on the screen.
         mClipIconView.setLayoutParams(new FrameLayout.LayoutParams(lp.width, lp.height, LEFT));
         mBtvDrawable.setLayoutParams(new FrameLayout.LayoutParams(lp.width, lp.height, LEFT));
+    }
+
+    /**
+     * Angle of a free-layout icon at {@code progress}. Open drops it while the window is
+     * still small. Close picks it up only as the window arrives, so a full-screen surface
+     * is not spun on top of the icon.
+     */
+    public boolean hasFreeIconTransform() {
+        return mHasFreeIconTransform;
+    }
+
+    public float getDrawRotation(float progress, boolean isOpening) {
+        if (!mHasFreeIconTransform || mFreeIconRotation == 0f) {
+            return 0f;
+        }
+        if (isOpening) {
+            float straighten = boundToRange(progress / 0.4f, 0f, 1f);
+            return mFreeIconRotation * (1f - straighten);
+        }
+        float tilt = boundToRange((progress - 0.6f) / 0.4f, 0f, 1f);
+        return mFreeIconRotation * tilt;
+    }
+
+    private void applyFreeIconRotation(RectF rect, float rotation) {
+        float scale = getScaleX();
+        InsettableFrameLayout.LayoutParams lp =
+                (InsettableFrameLayout.LayoutParams) getLayoutParams();
+        float layoutLeft = mIsRtl
+                ? mLauncher.getDeviceProfile().getDeviceProperties().getWidthPx()
+                        - lp.getMarginStart() - lp.width
+                : lp.getMarginStart();
+        float layoutTop = lp.topMargin;
+        float pivotX = rect.width() / (2f * scale);
+        float pivotY = rect.height() / (2f * scale);
+        setPivotX(pivotX);
+        setPivotY(pivotY);
+        // RenderNode applies translate, then rotate and scale about the pivot.
+        // Shift translation so the unrotated top-left stays on {@code rect}.
+        setTranslationX(rect.left - layoutLeft - pivotX * (1f - scale));
+        setTranslationY(rect.top - layoutTop - pivotY * (1f - scale));
+        setRotation(rotation);
     }
 
     private void updatePosition(RectF pos, InsettableFrameLayout.LayoutParams lp) {
@@ -277,6 +333,28 @@ public class FloatingIconView extends FrameLayout implements
             outViewBounds.set(0, 0, v.getWidth(), v.getHeight());
         }
 
+        if (v.getTag() instanceof ItemInfo info && WorkspaceFreeMode.hasIconTransform(info)
+                && outViewBounds.width() > 0 && outViewBounds.height() > 0) {
+            // Axis-aligned scaled glyph. The rotated bounding box is larger than the icon,
+            // and mapping only two corners of the rotated matrix is not a rectangle of it.
+            // Rotation is applied later, on this rect, by the window and the floating view.
+            float cx = outViewBounds.exactCenterX();
+            float cy = outViewBounds.exactCenterY();
+            // Resting center: this view's scale and rotation, not the workspace reveal
+            // scale. That reveal is temporary; folding it into the rect leaves the
+            // stand-in short of the named icon. Size is the adjusted glyph, so the
+            // icon does not draw at the original size and then pop.
+            float[] center = new float[] { cx, cy };
+            v.getMatrix().mapPoints(center);
+            Utilities.getDescendantCoordRelativeToAncestor(
+                    v, launcher.getDragLayer(), center, false, true);
+            float glyphScale = WorkspaceFreeMode.sanitizeScale(info.freeScale);
+            float halfW = outViewBounds.width() / 2f * glyphScale;
+            float halfH = outViewBounds.height() / 2f * glyphScale;
+            outRect.set(center[0] - halfW, center[1] - halfH,
+                    center[0] + halfW, center[1] + halfH);
+            return;
+        }
         Utilities.getBoundsForViewInDragLayer(launcher.getDragLayer(), v, outViewBounds,
                 ignoreTransform, null /** recycle */, outRect);
     }
@@ -313,6 +391,9 @@ public class FloatingIconView extends FrameLayout implements
         } else if (btvIcon instanceof FastBitmapDrawable fbd
                 && fbd.getDelegate() instanceof PreloadIconDelegate) {
             // Force the progress bar to display.
+            drawable = btvIcon;
+        } else if (WorkspaceFreeMode.hasIconTransform(info) && btvIcon != null) {
+            // The home bitmap. Adaptive layers scale into a second glyph on the window.
             drawable = btvIcon;
         } else if (originalView instanceof ImageView) {
             drawable = ((ImageView) originalView).getDrawable();
@@ -699,6 +780,11 @@ public class FloatingIconView extends FrameLayout implements
     private void updateViewsVisibility(boolean isVisible) {
         if (mOriginalIcon != null) {
             setPropertiesVisible(mOriginalIcon, isVisible);
+            // Alpha is animated back to 1 by the workspace reveal, which leaves the
+            // scaled icon on screen next to the floating one. Visibility is not.
+            if (mHasFreeIconTransform) {
+                mOriginalIcon.setVisibility(isVisible ? View.VISIBLE : View.INVISIBLE);
+            }
         }
         if (mMatchVisibilityView != null) {
             mMatchVisibilityView.postCallback(view -> {
@@ -725,7 +811,10 @@ public class FloatingIconView extends FrameLayout implements
         setTranslationY(0);
         setScaleX(1);
         setScaleY(1);
+        setRotation(0f);
         setAlpha(1);
+        mFreeIconRotation = 0f;
+        mHasFreeIconTransform = false;
         if (mLoadIconSignal != null) {
             mLoadIconSignal.cancel();
         }

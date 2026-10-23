@@ -64,6 +64,11 @@ public class ContentWriter {
         return this;
     }
 
+    public ContentWriter put(String key, float value) {
+        mValues.put(key, value);
+        return this;
+    }
+
     public ContentWriter put(String key, String value) {
         mValues.put(key, value);
         return this;

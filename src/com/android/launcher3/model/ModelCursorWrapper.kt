@@ -25,6 +25,8 @@ import com.android.launcher3.LauncherSettings.Favorites.CELLX
 import com.android.launcher3.LauncherSettings.Favorites.CELLY
 import com.android.launcher3.LauncherSettings.Favorites.FREEX
 import com.android.launcher3.LauncherSettings.Favorites.FREEY
+import com.android.launcher3.LauncherSettings.Favorites.FREE_ROTATION
+import com.android.launcher3.LauncherSettings.Favorites.FREE_SCALE
 import com.android.launcher3.LauncherSettings.Favorites.CONTAINER
 import com.android.launcher3.LauncherSettings.Favorites.ICON
 import com.android.launcher3.LauncherSettings.Favorites.INTENT
@@ -53,6 +55,8 @@ open class ModelCursorWrapper(cursor: Cursor, private val queriedColumns: Array<
     val cellY: Int by CELLY.delegateInt()
     val freeX: Int by FREEX.delegateIntOrDefault(-1)
     val freeY: Int by FREEY.delegateIntOrDefault(-1)
+    val freeScale: Float by FREE_SCALE.delegateFloatOrDefault(1f)
+    val freeRotation: Float by FREE_ROTATION.delegateFloatOrDefault(0f)
     val spanX: Int by SPANX.delegateInt()
     val spanY: Int by SPANY.delegateInt()
     val rank: Int by RANK.delegateInt()
@@ -82,6 +86,13 @@ open class ModelCursorWrapper(cursor: Cursor, private val queriedColumns: Array<
             if (queriedColumns == null || queriedColumns.contains(this)) getColumnIndex(this)
             else -1,
             { idx -> if (idx < 0 || isNull(idx)) default else getInt(idx) },
+        )
+
+    private fun String.delegateFloatOrDefault(default: Float) =
+        CursorProvider(
+            if (queriedColumns == null || queriedColumns.contains(this)) getColumnIndex(this)
+            else -1,
+            { idx -> if (idx < 0 || isNull(idx)) default else getFloat(idx) },
         )
 
     private fun String.delegateString() = delegate { getString(it) }

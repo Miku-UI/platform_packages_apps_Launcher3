@@ -209,7 +209,10 @@ class ScalingWorkspaceRevealAnim(
         // targeting the current position. Since we can't easily access this, instead we calculate
         // it using the animation of the whole of home.
         // We start by caching the final target position, as this is the base for the transforms.
+        // Hold the spring until this scale finishes, or it settles on an intermediate target and
+        // the real icon snaps to the final one.
         val originalTarget = RectF(windowTargetRect)
+        siblingAnimation?.setHoldEnd(true)
         animation.addOnFrameListener {
             val transformed = RectF(originalTarget)
 
@@ -260,6 +263,9 @@ class ScalingWorkspaceRevealAnim(
         animation.addListener(
             AnimatorListeners.forEndCallback(
                 Runnable {
+                    windowTargetRect?.set(originalTarget)
+                    siblingAnimation?.onTargetPositionChanged()
+                    siblingAnimation?.setHoldEnd(false)
                     Log.d(TAG, "onAnimationEnd, workspace and hotseat are visible")
                     // Ensure that the workspace and the hotseat are visible at the end
                     // of the animation regardless of what happens with this animation

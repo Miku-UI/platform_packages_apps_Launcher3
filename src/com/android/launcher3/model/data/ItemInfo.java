@@ -151,6 +151,16 @@ public class ItemInfo {
     public int freeY = WorkspaceFreeMode.UNSET;
 
     /**
+     * Free-layout glyph scale. {@link WorkspaceFreeMode#DEFAULT_ICON_SCALE} is the normal icon.
+     */
+    public float freeScale = WorkspaceFreeMode.DEFAULT_ICON_SCALE;
+
+    /**
+     * Free-layout glyph rotation in degrees, clockwise.
+     */
+    public float freeRotation = WorkspaceFreeMode.DEFAULT_ICON_ROTATION;
+
+    /**
      * Indicates the X cell span.
      */
     public int spanX = 1;
@@ -231,6 +241,8 @@ public class ItemInfo {
         cellY = info.cellY;
         freeX = info.freeX;
         freeY = info.freeY;
+        freeScale = info.freeScale;
+        freeRotation = info.freeRotation;
         spanX = info.spanX;
         spanY = info.spanY;
         minSpanX = info.minSpanX;
@@ -310,6 +322,8 @@ public class ItemInfo {
                 .put(LauncherSettings.Favorites.CELLY, cellY)
                 .put(LauncherSettings.Favorites.FREEX, freeX)
                 .put(LauncherSettings.Favorites.FREEY, freeY)
+                .put(LauncherSettings.Favorites.FREE_SCALE, freeScale)
+                .put(LauncherSettings.Favorites.FREE_ROTATION, freeRotation)
                 .put(LauncherSettings.Favorites.SPANX, spanX)
                 .put(LauncherSettings.Favorites.SPANY, spanY)
                 .put(LauncherSettings.Favorites.RANK, rank);
@@ -325,6 +339,14 @@ public class ItemInfo {
         Integer storedFreeY = values.getAsInteger(LauncherSettings.Favorites.FREEY);
         freeX = storedFreeX != null ? storedFreeX : WorkspaceFreeMode.UNSET;
         freeY = storedFreeY != null ? storedFreeY : WorkspaceFreeMode.UNSET;
+        Float storedFreeScale = values.getAsFloat(LauncherSettings.Favorites.FREE_SCALE);
+        Float storedFreeRotation = values.getAsFloat(LauncherSettings.Favorites.FREE_ROTATION);
+        freeScale = storedFreeScale != null
+                ? WorkspaceFreeMode.sanitizeScale(storedFreeScale)
+                : WorkspaceFreeMode.DEFAULT_ICON_SCALE;
+        freeRotation = storedFreeRotation != null
+                ? WorkspaceFreeMode.sanitizeRotation(storedFreeRotation)
+                : WorkspaceFreeMode.DEFAULT_ICON_ROTATION;
         spanX = values.getAsInteger(LauncherSettings.Favorites.SPANX);
         spanY = values.getAsInteger(LauncherSettings.Favorites.SPANY);
         rank = values.getAsInteger(LauncherSettings.Favorites.RANK);

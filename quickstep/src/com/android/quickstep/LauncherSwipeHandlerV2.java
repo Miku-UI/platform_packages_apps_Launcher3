@@ -206,9 +206,16 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
                 // We want the icon alpha to be 1 once this threshold is met, so that it can be
                 // seen morphing into the icon shape. But before the threshold, we want to limit
                 // the alpha to reduce the blur effect behind the window.
-                float iconAlpha = Interpolators.clampToProgress(progress, 0f, windowAlphaThreshold);
+                float iconAlpha = floatingIconView.hasFreeIconTransform()
+                        ? Interpolators.clampToProgress(progress, 0.82f, 1f)
+                        : Interpolators.clampToProgress(progress, 0f, windowAlphaThreshold);
                 floatingIconView.update(iconAlpha, currentRect, progress, windowAlphaThreshold,
                         radius, false, overlayAlpha);
+            }
+
+            @Override
+            public float getWindowRotation(float progress) {
+                return floatingIconView.getDrawRotation(progress, false);
             }
 
             @Override

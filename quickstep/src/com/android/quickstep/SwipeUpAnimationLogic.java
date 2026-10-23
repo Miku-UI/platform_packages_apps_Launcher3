@@ -239,6 +239,11 @@ public abstract class SwipeUpAnimationLogic implements
 
         public void update(RectF currentRect, float progress, float radius, int overlayAlpha) { }
 
+        /** Degrees to rotate the closing window about its center. Zero for an upright icon. */
+        public float getWindowRotation(float progress) {
+            return 0f;
+        }
+
         public void onCancel() { }
 
         /**
@@ -541,6 +546,14 @@ public abstract class SwipeUpAnimationLogic implements
                 mWindowCurrentRect.offset(mRunningTaskViewScrollOffset * progress, 0f);
                 mMatrix.setRectToRect(mCropRectF, mWindowCurrentRect, ScaleToFit.FILL);
                 mLocalTransformParams.setCornerRadius(mStartRadius);
+            }
+
+            if (mTargetTaskView == null) {
+                float rotation = mAnimationFactory.getWindowRotation(progress);
+                if (rotation != 0f) {
+                    mMatrix.postRotate(rotation, mWindowCurrentRect.centerX(),
+                            mWindowCurrentRect.centerY());
+                }
             }
 
             mLocalTransformParams.applySurfaceParams(

@@ -89,7 +89,15 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
 
     public View getChildAt(int cellX, int cellY) {
         final int count = getChildCount();
-        for (int i = 0; i < count; i++) {
+        // Free layout draws the last child on top and lets several icons share a cell.
+        // Hit-tests must use that front icon, not the one behind it.
+        int start = 0;
+        int step = 1;
+        if (mContainerType == WORKSPACE && WorkspaceFreeMode.isEnabled(getContext())) {
+            start = count - 1;
+            step = -1;
+        }
+        for (int i = start; i >= 0 && i < count; i += step) {
             View child = getChildAt(i);
             CellLayoutLayoutParams lp = (CellLayoutLayoutParams) child.getLayoutParams();
 
@@ -143,6 +151,7 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
         }
         if (mContainerType == WORKSPACE) {
             WorkspaceFreeMode.applyToLayoutParams(child, lp, this);
+            WorkspaceFreeMode.applyIconTransform(child);
         }
     }
 
@@ -201,6 +210,10 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
         int childWidthMeasureSpec = MeasureSpec.makeMeasureSpec(lp.width, MeasureSpec.EXACTLY);
         int childheightMeasureSpec = MeasureSpec.makeMeasureSpec(lp.height, MeasureSpec.EXACTLY);
         child.measure(childWidthMeasureSpec, childheightMeasureSpec);
+        // Pivot uses the measured size. Applying it before measure sees a 0 width.
+        if (mContainerType == WORKSPACE) {
+            WorkspaceFreeMode.applyIconTransform(child);
+        }
     }
 
     private boolean isChildQsb(View child) {

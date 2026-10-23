@@ -356,6 +356,14 @@ open class PopupContainer<T : ActivityContext>(
             override fun onPreDragStart(dragObject: DragObject) {
                 if (iconViewController == null || !updateIconUi) return
                 iconViewController.setForceHideDot(true)
+                // The bitmap stand-in clips a scaled or rotated icon. Leave the real view up
+                // and keep the drag image invisible until the finger actually moves it.
+                val transformed = originalView.scaleX != 1f || originalView.rotation != 0f
+                if (transformed) {
+                    originalView.visibility = VISIBLE
+                    dragObject.dragView?.alpha = 0f
+                    return
+                }
                 if (mIsAboveIcon) {
                     // Hide only the icon, keep the text visible.
                     iconViewController.setIconVisible(false)
@@ -369,15 +377,19 @@ open class PopupContainer<T : ActivityContext>(
             override fun onPreDragEnd(dragObject: DragObject, dragStarted: Boolean) {
                 if (iconViewController == null || !updateIconUi) return
                 iconViewController.setIconVisible(true)
-                if (dragStarted) {
+                val transformed = originalView.scaleX != 1f || originalView.rotation != 0f
+                if (dragStarted && !transformed) {
                     // Make sure we keep the original icon hidden while it is being dragged.
                     originalView.visibility = INVISIBLE
-                } else {
-                    if (!mIsAboveIcon) {
+                } else if (!dragStarted) {
+                    originalView.visibility = VISIBLE
+                    if (!mIsAboveIcon && !transformed) {
                         // Show the icon but keep the text hidden.
-                        originalView.visibility = VISIBLE
                         iconViewController.getFloatingViewTextAlpha()?.value = 0f
                     }
+                } else {
+                    originalView.visibility = VISIBLE
+                    dragObject.dragView?.alpha = 0f
                 }
             }
         }

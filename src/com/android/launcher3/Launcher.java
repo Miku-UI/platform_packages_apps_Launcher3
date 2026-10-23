@@ -1315,6 +1315,8 @@ public class Launcher extends StatefulActivity<LauncherState>
         launcherInfo.minSpanY = itemInfo.minSpanY;
         launcherInfo.freeX = itemInfo.freeX;
         launcherInfo.freeY = itemInfo.freeY;
+        launcherInfo.freeScale = itemInfo.freeScale;
+        launcherInfo.freeRotation = itemInfo.freeRotation;
         launcherInfo.rank = itemInfo.rank;
         launcherInfo.user = appWidgetInfo.getProfile();
         CellPos presenterPos = getCellPosMapper().mapModelToPresenter(itemInfo);

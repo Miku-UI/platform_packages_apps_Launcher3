@@ -269,6 +269,11 @@ public class DragView extends FrameLayout {
         if (!mAllowSpringDrawable) {
             return;
         }
+        // The spring icon is the untransformed glyph. The real view stays on screen instead.
+        if (Math.abs(info.freeScale - 1f) > 0.001f || Math.abs(info.freeRotation) > 0.1f) {
+            setAlpha(0f);
+            return;
+        }
 
         // Load the adaptive icon on a background thread and add the view in ui thread.
         MODEL_EXECUTOR.getHandler().postAtFrontOfQueue(() -> {

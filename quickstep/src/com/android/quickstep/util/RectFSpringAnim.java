@@ -108,6 +108,9 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
     private boolean mRectXAnimEnded;
     private boolean mRectYAnimEnded;
     private boolean mRectScaleAnimEnded;
+    /** Workspace reveal keeps moving {@link #mTargetRect} after the springs first settle. */
+    private boolean mHoldEnd;
+    private boolean mEndNotified;
 
     /**
      * Indicates which part of the start & target rects we are interpolating between.
@@ -163,30 +166,26 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
         }
     }
 
+    /**
+     * Keep the icon on screen until {@link #setHoldEnd(boolean)} is cleared. The home reveal
+     * moves the target for the whole scale, and ending at the first settle leaves the icon
+     * short of its final position.
+     */
+    public void setHoldEnd(boolean hold) {
+        mHoldEnd = hold;
+        if (!hold) {
+            maybeOnEnd();
+        }
+    }
+
     public void onTargetPositionChanged() {
-        if (isEnded()) {
+        if (mEndNotified || mRectXSpring == null || mRectYSpring == null) {
             return;
         }
-
-        if (mRectXSpring != null) {
-            mRectXSpring.animateToFinalPosition(mTargetRect.centerX());
-            mRectXAnimEnded = false;
-        }
-
-        if (mRectYSpring != null) {
-            switch (mTracking) {
-                case TRACKING_TOP:
-                    mRectYSpring.animateToFinalPosition(mTargetRect.top);
-                    break;
-                case TRACKING_BOTTOM:
-                    mRectYSpring.animateToFinalPosition(mTargetRect.bottom);
-                    break;
-                case TRACKING_CENTER:
-                    mRectYSpring.animateToFinalPosition(mTargetRect.centerY());
-                    break;
-            }
-            mRectYAnimEnded = false;
-        }
+        mRectXAnimEnded = false;
+        mRectYAnimEnded = false;
+        mRectXSpring.animateToFinalPosition(mTargetRect.centerX());
+        mRectYSpring.animateToFinalPosition(getTrackedYFromRect(mTargetRect));
     }
 
     public void addOnUpdateListener(OnUpdateListener onUpdateListener) {
@@ -285,6 +284,7 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
     }
 
     public void end() {
+        mHoldEnd = false;
         if (mAnimsStarted) {
             if (mRectXSpring.canSkipToEnd()) {
                 mRectXSpring.skipToEnd();
@@ -353,12 +353,14 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
     }
 
     private void maybeOnEnd() {
-        if (mAnimsStarted && isEnded()) {
-            mAnimsStarted = false;
-            setCanRelease(true);
-            for (Animator.AnimatorListener animatorListener : mAnimatorListeners) {
-                animatorListener.onAnimationEnd(null);
-            }
+        if (mHoldEnd || mEndNotified || !mAnimsStarted || !isEnded()) {
+            return;
+        }
+        mEndNotified = true;
+        mAnimsStarted = false;
+        setCanRelease(true);
+        for (Animator.AnimatorListener animatorListener : mAnimatorListeners) {
+            animatorListener.onAnimationEnd(null);
         }
     }
 

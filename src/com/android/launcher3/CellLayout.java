@@ -152,6 +152,8 @@ public class CellLayout extends ViewGroup {
 
     @Thunk final ArrayMap<CellLayoutLayoutParams, Animator> mReorderAnimators = new ArrayMap<>();
     @Thunk final ArrayMap<Reorderable, ReorderPreviewAnimation> mShakeAnimators = new ArrayMap<>();
+    /** Bumped when a reorder animation replaces another, so the old one does not clear the offset. */
+    private int mReorderAnimGeneration;
 
     private boolean mItemPlacementDirty = false;
 
@@ -1084,10 +1086,16 @@ public class CellLayout extends ViewGroup {
 
     public boolean animateChildToPosition(final View child, int cellX, int cellY, int duration,
                                           int delay, boolean permanent, boolean adjustOccupied) {
+        // Free layout keeps every other icon where it is, including ones that share a cell.
+        boolean freeChild = child.getTag() instanceof ItemInfo info && info.hasFreePosition();
+        if (WorkspaceFreeMode.isActive(this) || freeChild) {
+            return false;
+        }
         ShortcutAndWidgetContainer clc = getShortcutsAndWidgets();
 
         if (clc.indexOfChild(child) != -1 && (child instanceof Reorderable item)) {
             final CellLayoutLayoutParams lp = (CellLayoutLayoutParams) child.getLayoutParams();
+            final int generation = ++mReorderAnimGeneration;
 
             // We cancel any existing animations
             if (mReorderAnimators.containsKey(lp)) {
@@ -1133,6 +1141,8 @@ public class CellLayout extends ViewGroup {
             if (finalPreviewOffsetX == 0 && finalPreviewOffsetY == 0
                     && initPreviewOffsetX == 0 && initPreviewOffsetY == 0) {
                 lp.isLockedToGrid = true;
+                item.getTranslateDelegate()
+                        .setTranslation(INDEX_REORDER_PREVIEW_OFFSET, 0, 0);
                 return true;
             }
 
@@ -1152,18 +1162,18 @@ public class CellLayout extends ViewGroup {
             va.addListener(new AnimatorListenerAdapter() {
                 boolean cancelled = false;
                 public void onAnimationEnd(Animator animation) {
-                    // If the animation was cancelled, it means that another animation
-                    // has interrupted this one, and we don't want to lock the item into
-                    // place just yet.
-                    if (!cancelled) {
-                        lp.isLockedToGrid = true;
-                        item.getTranslateDelegate()
-                                .setTranslation(INDEX_REORDER_PREVIEW_OFFSET, 0, 0);
-                        child.requestLayout();
-                    }
-                    if (mReorderAnimators.containsKey(lp)) {
+                    if (mReorderAnimators.get(lp) == va) {
                         mReorderAnimators.remove(lp);
                     }
+                    // A newer animation owns the offset. A cancel with no successor must not
+                    // leave the icon translated, or it stays visually in the wrong cell.
+                    if (cancelled && generation != mReorderAnimGeneration) {
+                        return;
+                    }
+                    lp.isLockedToGrid = true;
+                    item.getTranslateDelegate()
+                            .setTranslation(INDEX_REORDER_PREVIEW_OFFSET, 0, 0);
+                    child.requestLayout();
                 }
                 public void onAnimationCancel(Animator animation) {
                     cancelled = true;
@@ -1446,6 +1456,9 @@ public class CellLayout extends ViewGroup {
     // This method starts or changes the reorder preview animations
     private void beginOrAdjustReorderPreviewAnimations(ItemConfiguration solution,
                                                        View dragView, int mode) {
+        if (WorkspaceFreeMode.isActive(this)) {
+            return;
+        }
         int childCount = mShortcutsAndWidgets.getChildCount();
         for (int i = 0; i < childCount; i++) {
             View child = mShortcutsAndWidgets.getChildAt(i);
@@ -1472,6 +1485,9 @@ public class CellLayout extends ViewGroup {
     }
 
     private void commitTempPlacement(View dragView) {
+        if (WorkspaceFreeMode.isActive(this)) {
+            return;
+        }
         mTmpOccupied.copyTo(mOccupied);
 
         int screenId = mCellLayoutContainer.getCellLayoutId(this);
@@ -1553,6 +1569,11 @@ public class CellLayout extends ViewGroup {
      * Clear state variables to be ready for a new reorder.
      */
     protected void revertTempState() {
+        if (WorkspaceFreeMode.isActive(this)) {
+            completeAndClearReorderPreviewAnimations();
+            setItemPlacementDirty(false);
+            return;
+        }
         completeAndClearReorderPreviewAnimations();
         if (isItemPlacementDirty() && !DESTRUCTIVE_REORDER) {
             final int count = mShortcutsAndWidgets.getChildCount();
@@ -1919,12 +1940,24 @@ public class CellLayout extends ViewGroup {
                 && view.getTag() instanceof LauncherAppWidgetInfo info) {
             CellPos pos = mActivity.getCellPosMapper().mapModelToPresenter(info);
             mOccupied.markCells(pos.cellX, pos.cellY, info.spanX, info.spanY, false);
+        } else if (view != null && view.getParent() == mShortcutsAndWidgets) {
+            CellLayoutLayoutParams
+                    lp = (CellLayoutLayoutParams) view.getLayoutParams();
+            mOccupied.markCells(lp.getCellX(), lp.getCellY(), lp.cellHSpan, lp.cellVSpan, false);
+        } else {
             return;
         }
-        if (view == null || view.getParent() != mShortcutsAndWidgets) return;
-        CellLayoutLayoutParams
-                lp = (CellLayoutLayoutParams) view.getLayoutParams();
-        mOccupied.markCells(lp.getCellX(), lp.getCellY(), lp.cellHSpan, lp.cellVSpan, false);
+        // Several free-placed icons can share a cell. Clearing the dragged icon must not
+        // make the cell look empty, or a later reorder pushes whoever is still there.
+        if (WorkspaceFreeMode.isActive(this)) {
+            int count = mShortcutsAndWidgets.getChildCount();
+            for (int i = 0; i < count; i++) {
+                View child = mShortcutsAndWidgets.getChildAt(i);
+                if (child != view) {
+                    markCellsAsOccupiedForView(child);
+                }
+            }
+        }
     }
 
     public int getDesiredWidth() {

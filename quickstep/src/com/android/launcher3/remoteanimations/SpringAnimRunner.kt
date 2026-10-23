@@ -68,6 +68,7 @@ constructor(
         RemoteAnimationCoordinateTransfer(activityContext)
 
     private var windowCornerRadius: Float? = null
+    private var windowRotation = 0f
 
     init {
         // transfer the coordinate based on animation target.
@@ -84,6 +85,11 @@ constructor(
 
     fun setWindowCornerRadius(radius: Float?) {
         windowCornerRadius = radius
+    }
+
+    /** Extra rotation, in degrees, applied about the current window center. */
+    fun setWindowRotation(degrees: Float) {
+        windowRotation = degrees
     }
 
     fun getCornerRadius(progress: Float): Float =
@@ -131,6 +137,13 @@ constructor(
                 // Match size and position of currentRect.
                 matrix.setScale(scale, scale)
                 matrix.postTranslate(currentAnimTargetRectF.left, currentAnimTargetRectF.top)
+                if (windowRotation != 0f) {
+                    matrix.postRotate(
+                        windowRotation,
+                        currentAnimTargetRectF.centerX(),
+                        currentAnimTargetRectF.centerY(),
+                    )
+                }
 
                 tmpRectF.round(tmpRect)
                 builder

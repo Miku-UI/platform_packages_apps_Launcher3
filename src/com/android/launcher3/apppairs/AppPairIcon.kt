@@ -27,7 +27,9 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import com.android.launcher3.BubbleTextView
 import com.android.launcher3.Flags
+import com.android.launcher3.FreeIconTransformHost
 import com.android.launcher3.Launcher
+import com.android.launcher3.WorkspaceFreeMode
 import com.android.launcher3.LauncherAppState.Companion.getInstance
 import com.android.launcher3.R
 import com.android.launcher3.Reorderable
@@ -55,7 +57,13 @@ import kotlin.math.ceil
  * apps are set into these rectangles.
  */
 class AppPairIcon :
-    FrameLayout, DraggableView, Reorderable, Poppable, IconViewController, CustomTouchDelegate {
+    FrameLayout,
+    DraggableView,
+    Reorderable,
+    Poppable,
+    IconViewController,
+    CustomTouchDelegate,
+    FreeIconTransformHost {
     // A view that holds the app pair icon graphic.
     lateinit var iconDrawableArea: AppPairIconGraphic
         private set
@@ -89,6 +97,11 @@ class AppPairIcon :
     constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
 
     constructor(context: Context) : super(context)
+
+    init {
+        clipChildren = false
+        clipToPadding = false
+    }
 
     override fun onFinishInflate() {
         super.onFinishInflate()
@@ -165,6 +178,10 @@ class AppPairIcon :
     // Required for Reorderable
     override fun setReorderBounceScale(scale: Float) {
         mScaleForReorderBounce = scale
+        val info = tag as? ItemInfo
+        if (info != null && WorkspaceFreeMode.hasIconTransform(info)) {
+            return
+        }
         super.setScaleX(scale)
         super.setScaleY(scale)
     }
@@ -188,6 +205,18 @@ class AppPairIcon :
             updateTitleAndA11yTitle()
             iconDrawableArea.redraw()
         }
+    }
+
+    override fun getFreeIconBounds(out: Rect) {
+        iconDrawableArea.getIconBounds(out)
+    }
+
+    override fun setFreeIconTransform(scale: Float, rotationDegrees: Float) {
+        val bounds = Rect()
+        if (::iconDrawableArea.isInitialized) {
+            iconDrawableArea.getIconBounds(bounds)
+        }
+        WorkspaceFreeMode.applyTransformToView(this, bounds, scale, rotationDegrees)
     }
 
     override fun dispatchDraw(canvas: Canvas) {

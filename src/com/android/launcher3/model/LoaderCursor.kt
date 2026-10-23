@@ -359,6 +359,8 @@ constructor(
         info.cellY = cellY
         info.freeX = freeX
         info.freeY = freeY
+        info.freeScale = WorkspaceFreeMode.sanitizeScale(freeScale)
+        info.freeRotation = WorkspaceFreeMode.sanitizeRotation(freeRotation)
     }
 
     /**

@@ -17,6 +17,7 @@
 package com.android.launcher3;
 
 import static com.android.launcher3.AbstractFloatingView.TYPE_FOLDER;
+import static com.android.launcher3.AbstractFloatingView.TYPE_FREE_ICON_TRANSFORM;
 import static com.android.launcher3.AbstractFloatingView.TYPE_WIDGET_RESIZE_FRAME;
 import static com.android.launcher3.BubbleTextView.DISPLAY_FOLDER;
 import static com.android.launcher3.Flags.enableCursorDrivenWorkflows;
@@ -1370,7 +1371,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         // Open folders are already animated closed on first touch outside. If page is swiped after,
         // then make sure folder is closed immediately.
         AbstractFloatingView.closeOpenViews(mLauncher, false, TYPE_WIDGET_RESIZE_FRAME
-            | TYPE_FOLDER);
+            | TYPE_FREE_ICON_TRANSFORM | TYPE_FOLDER);
 
         super.onPageBeginTransition();
         updateChildrenLayersEnabled();
@@ -1799,7 +1800,10 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         View child = cellInfo.cell;
 
         mDragInfo = cellInfo;
-        child.setVisibility(INVISIBLE);
+        // A scaled or rotated icon stays on the workspace. The drag bitmap would clip it.
+        if (!WorkspaceFreeMode.viewIsTransformed(child)) {
+            child.setVisibility(INVISIBLE);
+        }
 
         if (options.isAccessibleDrag) {
             mAccessibilityDragListener =
@@ -2147,6 +2151,9 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
     }
 
     boolean willCreateUserFolder(ItemInfo info, View dropOverView, boolean considerTimeout) {
+        if (dropOverView != null && !WorkspaceFreeMode.canMergeIntoNewFolder(info, dropOverView)) {
+            return false;
+        }
         if (dropOverView != null) {
             CellLayoutLayoutParams lp = (CellLayoutLayoutParams) dropOverView.getLayoutParams();
             if (lp.useTmpCoords && (lp.getTmpCellX() != lp.getCellX()
@@ -2218,6 +2225,10 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
     boolean createUserFolderIfNecessary(View newView, int container, CellLayout target, View v,
             float distance, boolean external, DragObject d) {
         if (v == null) return false;
+        if (newView.getTag() instanceof ItemInfo source
+                && !WorkspaceFreeMode.canMergeIntoNewFolder(source, v)) {
+            return false;
+        }
         CellLayoutLayoutParams destLp = (CellLayoutLayoutParams) v.getLayoutParams();
         int[] targetCell = new int[]{destLp.getCellX(), destLp.getCellY()};
         float folderRadius = WorkspaceFreeMode.isActive(target)
@@ -2424,6 +2435,17 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                 // Move internally
                 boolean hasMovedLayouts = (getParentCellLayoutForView(cell) != dropTargetLayout);
                 boolean hasMovedIntoHotseat = mLauncher.isHotseatLayout(dropTargetLayout);
+                if (hasMovedIntoHotseat) {
+                    WorkspaceFreeMode.abandonTransformedDrag(cell);
+                }
+                boolean placedTransformed = !hasMovedIntoHotseat
+                        && WorkspaceFreeMode.placeTransformedDrag(
+                                cell, dropTargetLayout, d.dragInfo,
+                                getCellLayoutId(dropTargetLayout));
+                if (placedTransformed) {
+                    // The icon already sits on this page, under the finger.
+                    hasMovedLayouts = false;
+                }
                 int container = hasMovedIntoHotseat ? CONTAINER_HOTSEAT : CONTAINER_DESKTOP;
                 int screenId = (mTargetCell[0] < 0) ?
                         mDragInfo.screenId : getCellLayoutId(dropTargetLayout);
@@ -2438,11 +2460,19 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                         && !hasMovedIntoHotseat;
                 boolean createdOrAddedToFolder;
                 if (freeLayout) {
+                    // The drag image of a scaled icon is not where the icon is. Hit-test the
+                    // icon that is actually under the finger.
+                    float[] folderPoint = mDragViewVisualCenter;
+                    if (placedTransformed) {
+                        folderPoint = new float[] {
+                                cell.getX() + cell.getWidth() / 2f,
+                                cell.getY() + cell.getHeight() / 2f};
+                    }
                     View dropOver = WorkspaceFreeMode.findDropOverView(dropTargetLayout,
-                            mDragViewVisualCenter[0], mDragViewVisualCenter[1], cell);
+                            folderPoint[0], folderPoint[1], cell);
                     float distance = dropOver == null ? Float.MAX_VALUE
                             : WorkspaceFreeMode.distanceToViewCenter(dropTargetLayout, dropOver,
-                                    mDragViewVisualCenter);
+                                    folderPoint);
                     createdOrAddedToFolder = dropOver != null
                             && (createUserFolderIfNecessary(cell, container, dropTargetLayout,
                                     dropOver, distance, false, d)
@@ -2489,15 +2519,22 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                 int[] resultSpan = new int[2];
                 if (returnToOriginalCellToPreventShuffling) {
                     mTargetCell[0] = mTargetCell[1] = -1;
+                } else if (freeLayout) {
+                    // Nearest cell only. performReorder would push every icon that shares it.
+                    resultSpan[0] = spanX;
+                    resultSpan[1] = spanY;
                 } else {
                     mTargetCell = dropTargetLayout.performReorder((int) mDragViewVisualCenter[0],
                             (int) mDragViewVisualCenter[1], minSpanX, minSpanY, spanX, spanY,
                             cell, mTargetCell, resultSpan, CellLayout.MODE_ON_DROP);
                 }
                 if (freeLayout) {
-                    WorkspaceFreeMode.setFromVisualCenter(item, dropTargetLayout,
-                            mDragViewVisualCenter[0], mDragViewVisualCenter[1], spanX, spanY,
-                            cell);
+                    if (!placedTransformed
+                            && !WorkspaceFreeMode.commitTransformedDrag(item, cell)) {
+                        WorkspaceFreeMode.setFromVisualCenter(item, dropTargetLayout,
+                                mDragViewVisualCenter[0], mDragViewVisualCenter[1], spanX, spanY,
+                                cell);
+                    }
                     mTargetCell[0] = item.cellX;
                     mTargetCell[1] = item.cellY;
                 } else {
@@ -2529,6 +2566,8 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                     if (info != item) {
                         info.freeX = item.freeX;
                         info.freeY = item.freeY;
+                        info.freeScale = item.freeScale;
+                        info.freeRotation = item.freeRotation;
                     }
                     if (freeLayout
                             && cell.getLayoutParams() instanceof CellLayoutLayoutParams curLp
@@ -2637,6 +2676,10 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                     int animationType = resizeOnDrop ? ANIMATE_INTO_POSITION_AND_RESIZE :
                             ANIMATE_INTO_POSITION_AND_DISAPPEAR;
                     animateWidgetDrop(info, parent, d.dragView, null, animationType, cell, false);
+                } else if (WorkspaceFreeMode.viewIsTransformed(cell)) {
+                    // The icon already sits where the finger left it.
+                    d.deferDragViewCleanupPostAnimation = false;
+                    cell.setVisibility(VISIBLE);
                 } else {
                     int duration = snappedToNewPage ? ADJACENT_SCREEN_DROP_DURATION : -1;
                     mLauncher.getDragLayer().animateViewIntoPosition(d.dragView, cell, duration,
@@ -2923,6 +2966,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             setCurrentDropOverCell(mTargetCell[0], mTargetCell[1]);
 
             if (WorkspaceFreeMode.isActive(mDragTargetLayout)) {
+                mReorderAlarm.cancelAlarm();
                 View dropOver = WorkspaceFreeMode.findDropOverView(mDragTargetLayout,
                         mDragViewVisualCenter[0], mDragViewVisualCenter[1], child);
                 float targetCellDistance = dropOver == null ? Float.MAX_VALUE
@@ -2949,13 +2993,22 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                                 mDragViewVisualCenter[0], (int) mDragViewVisualCenter[1], item.spanX,
                         item.spanY, child, mTargetCell);
 
-                manageReorderOnDragOver(d, targetCellDistance, nearestDropOccupied, minSpanX,
-                        minSpanY, reorderX, reorderY);
-
-                if (mDragMode == DRAG_MODE_CREATE_FOLDER || mDragMode == DRAG_MODE_ADD_TO_FOLDER ||
-                        !nearestDropOccupied) {
+                // Crossing the dock must not preview-shuffle its icons. A real drop still
+                // reorders, because the hotseat stays on the grid.
+                if (WorkspaceFreeMode.isEnabled(mLauncher)) {
+                    mReorderAlarm.cancelAlarm();
                     if (mDragTargetLayout != null) {
                         mDragTargetLayout.revertTempState();
+                    }
+                } else {
+                    manageReorderOnDragOver(d, targetCellDistance, nearestDropOccupied, minSpanX,
+                            minSpanY, reorderX, reorderY);
+
+                    if (mDragMode == DRAG_MODE_CREATE_FOLDER || mDragMode == DRAG_MODE_ADD_TO_FOLDER
+                            || !nearestDropOccupied) {
+                        if (mDragTargetLayout != null) {
+                            mDragTargetLayout.revertTempState();
+                        }
                     }
                 }
             }
@@ -3083,8 +3136,15 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             // extreme X coordinate between the finger location and the center of the object
             // being dragged. This is either the max or the min of the two depending on whether
             // dragging to the left / right, respectively.
-            touchX = (((pageIndex < nextPage) && !mIsRtl) || (pageIndex > nextPage && mIsRtl))
-                    ? Math.min(d.x, centerX) : Math.max(d.x, centerX);
+            // A scaled icon's drag image is much wider than the finger. Using that
+            // center trips the neighbour page while the finger is still mid-screen.
+            if (freeTransformedDrag(d)) {
+                touchX = d.x;
+            } else {
+                touchX = (((pageIndex < nextPage) && !mIsRtl)
+                        || (pageIndex > nextPage && mIsRtl))
+                        ? Math.min(d.x, centerX) : Math.max(d.x, centerX);
+            }
             CellLayout layout = verifyInsidePage(pageIndex, touchX, touchY);
             if (layout != null) {
                 return layout;
@@ -3107,9 +3167,17 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
         int scroll = getScrollX();
         int step = isTwoPanelEnabled() ? 2 : 1;
         int page = -1;
-        if (Math.min(d.x, centerX) <= scroll + edge) {
+        // Menu-open hold must not turn the page. Once the drag is real, only the
+        // finger counts — the scaled bitmap's center reaches the edge too soon.
+        boolean transformed = freeTransformedDrag(d);
+        if (transformed && mDragController.isInPreDrag()) {
+            return null;
+        }
+        float leftX = transformed ? d.x : Math.min(d.x, centerX);
+        float rightX = transformed ? d.x : Math.max(d.x, centerX);
+        if (leftX <= scroll + edge) {
             page = mIsRtl ? nextPage + step : nextPage - step;
-        } else if (Math.max(d.x, centerX) >= scroll + width - edge) {
+        } else if (rightX >= scroll + width - edge) {
             page = mIsRtl ? nextPage - step : nextPage + step;
         }
         if (page >= 0 && page < getPageCount()) {
@@ -3119,6 +3187,13 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
             }
         }
         return null;
+    }
+
+    private boolean freeTransformedDrag(DragObject d) {
+        if (!WorkspaceFreeMode.isEnabled(mLauncher) || !(d.originalView instanceof View)) {
+            return false;
+        }
+        return WorkspaceFreeMode.viewIsTransformed((View) d.originalView);
     }
 
     /**
@@ -3745,6 +3820,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
                 removeWorkspaceItem(mDragInfo.cell);
             }
         } else if (mDragInfo != null) {
+            WorkspaceFreeMode.cancelTransformedDrag(mDragInfo.cell);
             // When drag is cancelled, reattach content view back to its original parent.
             if (mDragInfo.cell instanceof LauncherAppWidgetHostView && d.dragView != null) {
                 d.dragView.detachContentView(/* reattachToPreviousParent= */ true);

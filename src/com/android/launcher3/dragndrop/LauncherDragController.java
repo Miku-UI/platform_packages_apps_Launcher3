@@ -26,13 +26,16 @@ import android.graphics.drawable.Drawable;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 import androidx.annotation.Nullable;
 
 import com.android.launcher3.DropTarget;
+import com.android.launcher3.FreeModeTransformFrame;
 import com.android.launcher3.Launcher;
 import com.android.launcher3.R;
 import com.android.launcher3.WorkspaceFreeMode;
+import com.android.launcher3.popup.PopupContainer;
 import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.widget.util.WidgetDragScaleUtils;
 
@@ -47,6 +50,10 @@ public class LauncherDragController extends DragController {
 
     private final FlingToDeleteHelper mFlingToDeleteHelper;
     private final Launcher mLauncher;
+    /** Time for the shortcut menu to finish opening before the second hold is counted. */
+    private static final long MENU_OPEN_ALLOWANCE_MS = 500;
+
+    private final Runnable mFreeTransformHold = this::beginFreeIconTransform;
 
     public LauncherDragController(Launcher launcher) {
         super(launcher);
@@ -97,6 +104,78 @@ public class LauncherDragController extends DragController {
                         dragViewScaleOnDrop,
                         scalePx,
                         allowSpringDrawable);
+    }
+
+    @Override
+    protected void handleMoveEvent(int x, int y) {
+        boolean wasPreDrag = mIsInPreDrag;
+        super.handleMoveEvent(x, y);
+        if (mDragObject == null || !(mDragObject.originalView instanceof View icon)) {
+            return;
+        }
+        if (wasPreDrag && !mIsInPreDrag) {
+            WorkspaceFreeMode.beginTransformedDrag(icon, x, y);
+        }
+        if (!mIsInPreDrag) {
+            WorkspaceFreeMode.followTransformedDrag(icon, x, y);
+        }
+    }
+
+    @Override
+    protected void onPreDragHolding() {
+        View icon = preDragIcon();
+        if (!WorkspaceFreeMode.canTransform(icon)) {
+            return;
+        }
+        PopupContainer<?> popup = PopupContainer.getOpen(mLauncher);
+        if (popup == null || popup.getOriginalView() != icon) {
+            return;
+        }
+        // The menu's own open animation used to consume the whole second hold, so the
+        // frame replaced the menu as soon as it appeared. Wait out that open, then hold
+        // for two full long-press timeouts.
+        long timeout = ViewConfiguration.getLongPressTimeout() * 2L + MENU_OPEN_ALLOWANCE_MS;
+        mLauncher.getDragLayer().removeCallbacks(mFreeTransformHold);
+        mLauncher.getDragLayer().postDelayed(mFreeTransformHold, timeout);
+    }
+
+    @Override
+    protected void cancelPreDragHold() {
+        mLauncher.getDragLayer().removeCallbacks(mFreeTransformHold);
+    }
+
+    @Override
+    protected void callOnDragStart() {
+        FreeModeTransformFrame.dismiss(mLauncher);
+        super.callOnDragStart();
+    }
+
+    /**
+     * Popup is already up and the finger is still down. After another long-press interval, leave
+     * the popup and show the scale/rotate frame. This gesture stays with the drag layer until the
+     * finger lifts, so the icon does not launch.
+     */
+    private View preDragIcon() {
+        if (mDragObject != null && mDragObject.originalView instanceof View view) {
+            return view;
+        }
+        return null;
+    }
+
+    private void beginFreeIconTransform() {
+        View icon = preDragIcon();
+        if (!mIsInPreDrag || !WorkspaceFreeMode.canTransform(icon)) {
+            return;
+        }
+        PopupContainer<?> popup = PopupContainer.getOpen(mLauncher);
+        if (popup == null || popup.getOriginalView() != icon) {
+            return;
+        }
+        popup.close(false);
+        cancelDrag();
+        WorkspaceFreeMode.restoreIconPresentation(icon);
+        mLauncher.getDragLayer().performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        FreeModeTransformFrame.show(mLauncher, icon);
     }
 
     @Override

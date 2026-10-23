@@ -289,6 +289,18 @@ public class LauncherSettings {
         public static final String FREEY = "freeY";
 
         /**
+         * Free-layout glyph scale. 1 is the workspace icon size.
+         * <P>Type: REAL</P>
+         */
+        public static final String FREE_SCALE = "freeScale";
+
+        /**
+         * Free-layout glyph rotation in degrees, clockwise.
+         * <P>Type: REAL</P>
+         */
+        public static final String FREE_ROTATION = "freeRotation";
+
+        /**
          * The X span of the cell holding the favorite
          * <P>Type: INTEGER</P>
          */
@@ -365,6 +377,8 @@ public class LauncherSettings {
             }
             ensureIntegerColumn(db, tableName, FREEX, -1);
             ensureIntegerColumn(db, tableName, FREEY, -1);
+            ensureRealColumn(db, tableName, FREE_SCALE, 1);
+            ensureRealColumn(db, tableName, FREE_ROTATION, 0);
         }
 
         private static boolean tableExists(SQLiteDatabase db, String tableName) {
@@ -389,12 +403,21 @@ public class LauncherSettings {
 
         private static void ensureIntegerColumn(SQLiteDatabase db, String tableName,
                 String column, int defaultValue) {
+            ensureColumn(db, tableName, column, "INTEGER NOT NULL DEFAULT " + defaultValue);
+        }
+
+        private static void ensureRealColumn(SQLiteDatabase db, String tableName,
+                String column, int defaultValue) {
+            ensureColumn(db, tableName, column, "REAL NOT NULL DEFAULT " + defaultValue);
+        }
+
+        private static void ensureColumn(SQLiteDatabase db, String tableName, String column,
+                String type) {
             if (hasColumn(db, tableName, column)) {
                 return;
             }
             try {
-                db.execSQL("ALTER TABLE " + tableName + " ADD COLUMN " + column
-                        + " INTEGER NOT NULL DEFAULT " + defaultValue);
+                db.execSQL("ALTER TABLE " + tableName + " ADD COLUMN " + column + " " + type);
             } catch (SQLException e) {
                 Log.e("LauncherSettings", "Failed to add column " + column + " to " + tableName, e);
             }
@@ -413,6 +436,8 @@ public class LauncherSettings {
             columnsToTypes.put(CELLY, "INTEGER");
             columnsToTypes.put(FREEX, "INTEGER NOT NULL DEFAULT -1");
             columnsToTypes.put(FREEY, "INTEGER NOT NULL DEFAULT -1");
+            columnsToTypes.put(FREE_SCALE, "REAL NOT NULL DEFAULT 1");
+            columnsToTypes.put(FREE_ROTATION, "REAL NOT NULL DEFAULT 0");
             columnsToTypes.put(SPANX, "INTEGER");
             columnsToTypes.put(SPANY, "INTEGER");
             columnsToTypes.put(ITEM_TYPE, "INTEGER");

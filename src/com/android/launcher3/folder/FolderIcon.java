@@ -54,6 +54,7 @@ import com.android.launcher3.CheckLongPressHelper;
 import com.android.launcher3.DeviceProfile;
 import com.android.launcher3.DropTarget.DragObject;
 import com.android.launcher3.Flags;
+import com.android.launcher3.FreeIconTransformHost;
 import com.android.launcher3.Launcher;
 import com.android.launcher3.LauncherSettings;
 import com.android.launcher3.OnAlarmListener;
@@ -61,6 +62,7 @@ import com.android.launcher3.R;
 import com.android.launcher3.Reorderable;
 import com.android.launcher3.Utilities;
 import com.android.launcher3.Workspace;
+import com.android.launcher3.WorkspaceFreeMode;
 import com.android.launcher3.allapps.ActivityAllAppsContainerView;
 import com.android.launcher3.anim.AnimatedFloat;
 import com.android.launcher3.celllayout.CellLayoutLayoutParams;
@@ -105,7 +107,8 @@ import java.util.function.Predicate;
  * An icon that can appear on in the workspace representing an {@link Folder}.
  */
 public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion,
-        DraggableView, Reorderable, Poppable, IconViewController, CustomTouchDelegate {
+        DraggableView, Reorderable, Poppable, IconViewController, CustomTouchDelegate,
+        FreeIconTransformHost {
 
     private final MultiTranslateDelegate mTranslateDelegate = new MultiTranslateDelegate(this);
     @Thunk ActivityContext mActivity;
@@ -635,6 +638,18 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         drawDot(canvas);
     }
 
+    @Override
+    public void getFreeIconBounds(Rect out) {
+        getPreviewBounds(out);
+    }
+
+    @Override
+    public void setFreeIconTransform(float scale, float rotation) {
+        Rect bounds = new Rect();
+        getPreviewBounds(bounds);
+        WorkspaceFreeMode.applyTransformToView(this, bounds, scale, rotation);
+    }
+
     public void drawDot(Canvas canvas) {
         if (!mForceHideDot && ((mDotInfo != null && mDotInfo.hasDot()) || mDotScale > 0)) {
             Rect iconBounds = mDotParams.iconBounds;
@@ -772,6 +787,9 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     @Override
     public void setReorderBounceScale(float scale) {
         mScaleForReorderBounce = scale;
+        if (getTag() instanceof ItemInfo info && WorkspaceFreeMode.hasIconTransform(info)) {
+            return;
+        }
         super.setScaleX(scale);
         super.setScaleY(scale);
     }

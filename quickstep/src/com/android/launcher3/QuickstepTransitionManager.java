@@ -965,8 +965,8 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
             FloatProp mIconScaleToFitScreen = new FloatProp(prop.initialAppIconScale,
                     prop.finalAppIconScale);
             FloatProp mIconAlpha = new FloatProp(prop.iconAlphaStart, 0f,
-                    clampToDuration(LINEAR, APP_LAUNCH_ALPHA_START_DELAY, APP_LAUNCH_ALPHA_DURATION,
-                            APP_LAUNCH_DURATION));
+                    clampToDuration(LINEAR, APP_LAUNCH_ALPHA_START_DELAY,
+                            APP_LAUNCH_ALPHA_DURATION, APP_LAUNCH_DURATION));
 
             FloatProp mWindowRadius =
                     new FloatProp(initialWindowRadius, getWindowCornerRadius(mLauncher));
@@ -1002,8 +1002,8 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
 
                     AnimOpenProperties prop = new AnimOpenProperties(mLauncher.getResources(),
                             windowTargetBounds, launcherIconBounds, v,
-                            dragLayerBounds[0], dragLayerBounds[1], hasSplashScreen,
-                            floatingView.isDifferentFromAppIcon());
+                            dragLayerBounds[0], dragLayerBounds[1],
+                            hasSplashScreen, floatingView.isDifferentFromAppIcon());
                     mCropRectCenterY = new FloatProp(prop.cropCenterYStart, prop.cropCenterYEnd);
                     mCropRectHeight = new FloatProp(prop.cropHeightStart, prop.cropHeightEnd);
                     mDy = new FloatProp(0, prop.dY);
@@ -1760,10 +1760,14 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                     // We want the icon alpha to be 1 once this threshold is met, so that it can be
                     // seen morphing into the icon shape. But before the threshold, we want to limit
                     // the alpha to reduce the blur effect behind the window.
-                    float iconAlpha =
-                            Interpolators.clampToProgress(progress, 0f, windowAlphaThreshold);
+                    // The home bitmap stays out until the window is nearly the icon.
+                    // Earlier, it is a second glyph drawn over the app.
+                    float iconAlpha = finalFloatingIconView.hasFreeIconTransform()
+                            ? Interpolators.clampToProgress(progress, 0.82f, 1f)
+                            : Interpolators.clampToProgress(progress, 0f, windowAlphaThreshold);
                     finalFloatingIconView.update(iconAlpha, currentRectF, progress,
                             windowAlphaThreshold, getCornerRadius(progress), false);
+                    setWindowRotation(finalFloatingIconView.getDrawRotation(progress, false));
 
                     super.onUpdate(currentRectF, progress);
                 }

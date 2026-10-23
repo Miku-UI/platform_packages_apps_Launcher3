@@ -132,7 +132,7 @@ import java.util.Locale;
  */
 public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
         FloatingIconViewCompanion, DraggableView, Reorderable, Poppable, IconViewController,
-        CustomTouchDelegate {
+        CustomTouchDelegate, FreeIconTransformHost {
 
     public static final String TAG = "BubbleTextView";
 
@@ -1058,15 +1058,18 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
      */
     public void getIconBounds(int iconSize, Rect outBounds) {
         outBounds.set(0, 0, iconSize, iconSize);
+        // The first measure runs before layout, so getWidth() is still 0.
+        int viewWidth = getWidth() > 0 ? getWidth() : getMeasuredWidth();
+        int viewHeight = getHeight() > 0 ? getHeight() : getMeasuredHeight();
         if (mLayoutHorizontal) {
-            int top = (getHeight() - iconSize) / 2;
+            int top = (viewHeight - iconSize) / 2;
             if (mIsRtl) {
-                outBounds.offsetTo(getWidth() - iconSize - getPaddingRight(), top);
+                outBounds.offsetTo(viewWidth - iconSize - getPaddingRight(), top);
             } else {
                 outBounds.offsetTo(getPaddingLeft(), top);
             }
         } else {
-            outBounds.offset((getWidth() - iconSize) / 2, getPaddingTop());
+            outBounds.offset((viewWidth - iconSize) / 2, getPaddingTop());
         }
     }
 
@@ -1418,6 +1421,18 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
     }
 
     @Override
+    public void getFreeIconBounds(Rect out) {
+        getIconBounds(out);
+    }
+
+    @Override
+    public void setFreeIconTransform(float scale, float rotation) {
+        Rect bounds = new Rect();
+        getIconBounds(bounds);
+        WorkspaceFreeMode.applyTransformToView(this, bounds, scale, rotation);
+    }
+
+    @Override
     public void setIconVisible(boolean visible) {
         mIsIconVisible = visible;
         if (!mIsIconVisible) {
@@ -1533,6 +1548,11 @@ public class BubbleTextView extends TextView implements ItemInfoUpdateReceiver,
     @Override
     public void setReorderBounceScale(float scale) {
         mScaleForReorderBounce = scale;
+        // A free scale is around the icon center. Replacing it with the bounce scale
+        // moves the glyph and the label.
+        if (getTag() instanceof ItemInfo info && WorkspaceFreeMode.hasIconTransform(info)) {
+            return;
+        }
         super.setScaleX(scale);
         super.setScaleY(scale);
     }

@@ -370,6 +370,7 @@ public class DragController implements DragDriver.EventListener, TouchController
             callOnDragStart();
         } else if (mOptions.preDragCondition != null) {
             mOptions.preDragCondition.onPreDragStart(mDragObject);
+            onPreDragHolding();
         }
 
         handleMoveEvent(mLastTouch.x, mLastTouch.y);
@@ -422,7 +423,14 @@ public class DragController implements DragDriver.EventListener, TouchController
 
     protected void onDragViewInitialized() { }
 
+    /** Pre-drag is showing and the finger is still down. */
+    protected void onPreDragHolding() { }
+
+    /** Clears a callback posted from {@link #onPreDragHolding()}. */
+    protected void cancelPreDragHold() { }
+
     protected void callOnDragStart() {
+        cancelPreDragHold();
         if (mOptions.preDragCondition != null) {
             mOptions.preDragCondition.onPreDragEnd(mDragObject, true /* dragStarted*/);
         }
@@ -481,6 +489,11 @@ public class DragController implements DragDriver.EventListener, TouchController
         return mDragDriver != null || (mOptions != null && mOptions.isAccessibleDrag);
     }
 
+    /** True while the long-press menu is up and the item has not started moving. */
+    public boolean isInPreDrag() {
+        return mIsInPreDrag;
+    }
+
     /**
      * Stop dragging without dropping.
      */
@@ -524,6 +537,7 @@ public class DragController implements DragDriver.EventListener, TouchController
     }
 
     protected void endDrag() {
+        cancelPreDragHold();
         if (isDragging()) {
             mDragDriver = null;
             boolean isDeferred = false;
