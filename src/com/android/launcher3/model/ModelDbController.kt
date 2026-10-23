@@ -150,6 +150,42 @@ internal constructor(
         FileLog.d(TAG, "Switched launcher store to ${openHelper.databaseName}")
     }
 
+    /**
+     * Deletes free-layout databases. The grid store is left in place. When free layout is on,
+     * a new free store is copied from the grid store afterwards.
+     */
+    @Synchronized
+    @WorkerThread
+    fun clearFreeStore() {
+        createDbIfNotExists()
+        val freeName = WorkspaceFreeMode.freeDbName(gridDbFile())
+        if (openHelper.databaseName == freeName) {
+            val gridHelper = createDatabaseHelper(forMigration = false, gridDbFile())
+            val oldHelper = openHelper
+            openHelper = gridHelper
+            if (oldHelper !== gridHelper) {
+                oldHelper.close()
+            }
+        }
+        val names = linkedSetOf(freeName)
+        val dir = context.getDatabasePath(freeName).parentFile
+        dir?.list()?.forEach { entry ->
+            if (entry.endsWith("_free.db")) {
+                names.add(entry)
+            }
+        }
+        for (name in names) {
+            if (name == openHelper.databaseName) {
+                continue
+            }
+            context.deleteDatabase(name)
+        }
+        if (WorkspaceFreeMode.isEnabled(context)) {
+            switchActiveStore()
+        }
+        FileLog.d(TAG, "Cleared free-layout store; open=${openHelper.databaseName}")
+    }
+
     private fun createDatabaseHelper(forMigration: Boolean, dbFile: String): DatabaseHelper {
         // Set the flag for empty DB
         val onEmptyDbCreateCallback =

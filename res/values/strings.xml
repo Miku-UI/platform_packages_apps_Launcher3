@@ -441,6 +441,14 @@
     <string name="workspace_free_mode_title">Free layout</string>
     <!-- Description for free layout: widgets and icons can be placed anywhere [CHAR LIMIT=NONE] -->
     <string name="workspace_free_mode_description">Place widgets and home screen icons anywhere, without snapping to the grid</string>
+    <!-- Title for deleting the free-layout database [CHAR LIMIT=40] -->
+    <string name="workspace_free_mode_clear_title">Clear free layout data</string>
+    <!-- Summary under the clear action [CHAR LIMIT=NONE] -->
+    <string name="workspace_free_mode_clear_description">Clears every change made in free layout. The normal home screen is left as it is.</string>
+    <!-- Warning shown before the free-layout database is deleted [CHAR LIMIT=NONE] -->
+    <string name="workspace_free_mode_clear_warning">Free-layout changes will be deleted and cannot be undone. The normal home screen is not affected.</string>
+    <!-- Confirm button for deleting the free-layout database [CHAR LIMIT=20] -->
+    <string name="workspace_free_mode_clear_confirm">Clear</string>
 
     <!-- Label on an icon that references an uninstalled package, for which we have no information about when it might be installed. [CHAR_LIMIT=15] -->
     <string name="package_state_unknown">Unknown</string>

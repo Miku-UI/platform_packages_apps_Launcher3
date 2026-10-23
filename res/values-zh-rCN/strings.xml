@@ -182,6 +182,10 @@
     <string name="auto_add_shortcuts_description" msgid="7117251166066978730">"适用于新应用"</string>
     <string name="workspace_free_mode_title">"自由模式"</string>
     <string name="workspace_free_mode_description">"打开后，所有小组件与桌面图标将可以不受网格限制的任意摆放"</string>
+    <string name="workspace_free_mode_clear_title">"清空自由模式数据"</string>
+    <string name="workspace_free_mode_clear_description">"清空在自由模式下所做的所有更改，不会影响普通模式下的桌面哦"</string>
+    <string name="workspace_free_mode_clear_warning">"自由模式下的桌面布局将被删除，且无法恢复。普通模式的桌面不会受到影响。"</string>
+    <string name="workspace_free_mode_clear_confirm">"清空"</string>
     <string name="package_state_unknown" msgid="7592128424511031410">"未知"</string>
     <string name="abandoned_clean_this" msgid="7610119707847920412">"移除"</string>
     <string name="abandoned_search" msgid="891119232568284442">"搜索"</string>

@@ -49,6 +49,7 @@ import java.io.File;
 public final class WorkspaceFreeMode {
 
     public static final String PREF_KEY = "pref_workspace_free_mode";
+    public static final String PREF_CLEAR_KEY = "pref_clear_workspace_free_mode";
     public static final int UNSET = -1;
     public static final float DEFAULT_ICON_SCALE = 1f;
     public static final float DEFAULT_ICON_ROTATION = 0f;

@@ -182,6 +182,10 @@
     <string name="auto_add_shortcuts_description" msgid="7117251166066978730">"新安裝的應用程式"</string>
     <string name="workspace_free_mode_title">"自由模式"</string>
     <string name="workspace_free_mode_description">"開啟後，所有小工具與主畫面圖示將可以不受網格限制任意擺放"</string>
+    <string name="workspace_free_mode_clear_title">"清除自由模式資料"</string>
+    <string name="workspace_free_mode_clear_description">"清除在自由模式下所做的所有變更，不會影響一般模式下的主畫面哦"</string>
+    <string name="workspace_free_mode_clear_warning">"自由模式下的主畫面配置將被刪除，且無法復原。一般模式的主畫面不會受到影響。"</string>
+    <string name="workspace_free_mode_clear_confirm">"清除"</string>
     <string name="package_state_unknown" msgid="7592128424511031410">"不明"</string>
     <string name="abandoned_clean_this" msgid="7610119707847920412">"移除"</string>
     <string name="abandoned_search" msgid="891119232568284442">"搜尋"</string>
