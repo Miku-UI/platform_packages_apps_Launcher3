@@ -147,7 +147,7 @@ class ResizeFrameViewModel(
 
     fun onDrag(dragAmount: Offset) {
         val handles = draggingHandles ?: return
-        totalDragAmount += dragAmount
+        totalDragAmount += resizeManager.screenDragDelta(dragAmount)
 
         resizeManager.visualizeResizeForDelta(
             horizontal = handles.horizontal,

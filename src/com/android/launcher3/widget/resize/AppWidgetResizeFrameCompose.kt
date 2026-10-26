@@ -25,6 +25,9 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewTreeObserver
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -32,7 +35,9 @@ import com.android.launcher3.AppWidgetResizeFrameBase
 import com.android.launcher3.CellLayout
 import com.android.launcher3.DropTarget
 import com.android.launcher3.Launcher
+import com.android.launcher3.LauncherSettings.Favorites
 import com.android.launcher3.PopupTouchHandler
+import com.android.launcher3.WorkspaceFreeMode
 import com.android.launcher3.R
 import com.android.launcher3.dragndrop.DragController
 import com.android.launcher3.dragndrop.DragLayer
@@ -66,6 +71,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private lateinit var viewModel: ResizeFrameViewModel
     private lateinit var widgetView: View
     private lateinit var composeView: ComposeView
+    private var rotateHandles: FreeWidgetRotateHandles? = null
 
     // Extra padding to leave out in frame size for the button content.
     private val touchTargetSize: Int =
@@ -74,19 +80,61 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     // Reusable rect for temporary usage in frequently occurring operations.
     private val tempRect = Rect()
 
+    private val followWidgetRotation =
+        ViewTreeObserver.OnPreDrawListener {
+            if (
+                isAttachedToWindow &&
+                    ::widgetView.isInitialized &&
+                    rotation != widgetView.rotation
+            ) {
+                if (width > 0 && height > 0) {
+                    pivotX = width / 2f
+                    pivotY = height / 2f
+                }
+                rotation = widgetView.rotation
+            }
+            true
+        }
+
     override fun onNewResizeRequest(bounds: Rect) {
         // Adjust the floating view to the requested size, so frame also shows at the size.
+        val frameWidth = bounds.width() + 2 * touchTargetSize
+        val frameHeight = bounds.height() + 2 * touchTargetSize
         (layoutParams as BaseDragLayer.LayoutParams).apply {
             x = bounds.left - touchTargetSize
             y = bounds.top - touchTargetSize
-            width = bounds.width() + 2 * touchTargetSize
-            height = bounds.height() + 2 * touchTargetSize
+            width = frameWidth
+            height = frameHeight
         }
+        // Same center as the widget. Rotation then puts the border on the widget's edges.
+        pivotX = frameWidth / 2f
+        pivotY = frameHeight / 2f
+        rotation = widgetView.rotation
 
         requestLayout()
 
         isFocusableInTouchMode = true
         requestFocus()
+    }
+
+    /** Keeps the border on the widget while it is dragged inside the edit frame. */
+    fun followMovedWidget() {
+        if (!::resizeManager.isInitialized || !::widgetView.isInitialized) {
+            return
+        }
+        val bounds = resizeManager.getCurrentWidgetBounds()
+        val frameWidth = bounds.width() + 2 * touchTargetSize
+        val frameHeight = bounds.height() + 2 * touchTargetSize
+        (layoutParams as BaseDragLayer.LayoutParams).apply {
+            x = bounds.left - touchTargetSize
+            y = bounds.top - touchTargetSize
+            width = frameWidth
+            height = frameHeight
+        }
+        pivotX = frameWidth / 2f
+        pivotY = frameHeight / 2f
+        rotation = widgetView.rotation
+        requestLayout()
     }
 
     @VisibleForTesting fun getViewModelForTest() = viewModel
@@ -103,14 +151,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             return false
         }
 
-        getHitRect(tempRect)
         // Hit rect might not yet be initialized if the resize frame intercepts the touch event
         // (e.g., ACTION_UP from a right-click) before the first layout pass has completed.
-        if (tempRect.isEmpty) {
+        if (width == 0 || height == 0) {
             return false
         }
 
-        if (tempRect.contains(ev.x.toInt(), ev.y.toInt())) {
+        if (pointInFrame(ev.x, ev.y)) {
             return false // let the widget's OR our compose view's handling do its thing.
         }
 
@@ -129,9 +176,43 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     /** Retrieves the view where accessibility actions happen. */
     override fun getViewForAccessibility(): View = widgetView
 
+    fun containsControllerTouch(ev: MotionEvent): Boolean = pointInFrame(ev.x, ev.y)
+
+    /** Touch is in drag-layer coordinates. A rotated frame's layout box is not its outline. */
+    private fun pointInFrame(x: Float, y: Float): Boolean {
+        if (width == 0 || height == 0) {
+            return false
+        }
+        if (rotation == 0f) {
+            getHitRect(tempRect)
+            return tempRect.contains(x.toInt(), y.toInt())
+        }
+        val radians = Math.toRadians(rotation.toDouble())
+        val c = cos(radians)
+        val s = sin(radians)
+        val dx = x - (this.x + pivotX)
+        val dy = y - (this.y + pivotY)
+        val localX = dx * c + dy * s + pivotX
+        val localY = -dx * s + dy * c + pivotY
+        return localX >= 0f && localY >= 0f && localX < width && localY < height
+    }
+
+    /** Closes the frame and forwards the touch the way an outside tap on the frame would. */
+    fun handleOutsideControllerTouch(ev: MotionEvent): Boolean {
+        close(/* animate= */ false)
+        val popup = PopupContainer.getOpen(launcher)
+        return popupTouchHandler.handleTouchEvent(popup, ev)
+    }
+
     override fun handleClose(animate: Boolean) {
         try {
             Trace.beginSection("closeAppWidgetResizeFrame")
+            rotateHandles?.let { handles ->
+                rotateHandles = null
+                if (handles.isOpen) {
+                    handles.close(/* animate= */ false)
+                }
+            }
             if (mIsOpen) {
                 resizeManager.finish()
             }
@@ -140,6 +221,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             // to asynchronously call `close()` again (which happens with `AbstractFloatingView`s
             // that get removed without being closed).
             mIsOpen = false
+            if (::widgetView.isInitialized) {
+                widgetView.viewTreeObserver.removeOnPreDrawListener(followWidgetRotation)
+            }
             launcher.dragController.removeDragSessionListener(this)
             launcher.dragLayer.removeView(this) // removing view should dispose composition.
         } finally {
@@ -186,6 +270,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
             }
         addView(composeView)
+        widgetView.viewTreeObserver.addOnPreDrawListener(followWidgetRotation)
 
         val launcher = Launcher.getLauncher(context)
         launcher.dragController.addDragSessionListener(this)
@@ -243,6 +328,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 setup(widgetView, cellLayout, dragLayer)
                 dragLayer.addView(this)
                 mIsOpen = true
+                val info = widgetView.tag as? ItemInfo
+                if (
+                    WorkspaceFreeMode.isEnabled(widgetView.context) &&
+                        info?.container == Favorites.CONTAINER_DESKTOP
+                ) {
+                    rotateHandles = FreeWidgetRotateHandles.show(this, widgetView)
+                }
                 dragLayer.post { onNewResizeRequest(resizeManager.getCurrentWidgetBounds()) }
             }
 

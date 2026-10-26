@@ -180,8 +180,8 @@ public class DragView extends FrameLayout {
         content.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         addView(content, new LayoutParams(width, height));
 
-        // If there is already a scale set on the content, we don't want to clip the children.
-        if (content.getScaleX() != 1 || content.getScaleY() != 1) {
+        // A rotated or scaled widget draws outside this view's layout box.
+        if (content.getScaleX() != 1 || content.getScaleY() != 1 || content.getRotation() != 0f) {
             setClipChildren(false);
             setClipToPadding(false);
         }
@@ -267,6 +267,10 @@ public class DragView extends FrameLayout {
     public void setItemInfo(final ItemInfo info) {
         mItemType = info.itemType;
         if (!mAllowSpringDrawable) {
+            return;
+        }
+        // Widgets are this view's content. Hiding it would hide the widget for the whole drag.
+        if (mContent instanceof AppWidgetHostView) {
             return;
         }
         // The spring icon is the untransformed glyph. The real view stays on screen instead.
@@ -566,9 +570,27 @@ public class DragView extends FrameLayout {
             view.measure(makeMeasureSpec(mWidth, EXACTLY), makeMeasureSpec(mHeight, EXACTLY));
             view.layout(mContent.getLeft(), mContent.getTop(),
                     mContent.getRight(), mContent.getBottom());
-            setClipToOutline(mContent.getClipToOutline());
-            setOutlineProvider(mContent.getOutlineProvider());
             view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            // The snapshot is the unrotated content. Keep the same pivot and rotation.
+            view.setPivotX(mContent.getPivotX());
+            view.setPivotY(mContent.getPivotY());
+            view.setScaleX(mContent.getScaleX());
+            view.setScaleY(mContent.getScaleY());
+            view.setRotation(mContent.getRotation());
+            boolean transformed = mContent.getRotation() != 0f
+                    || mContent.getScaleX() != 1f || mContent.getScaleY() != 1f;
+            if (transformed) {
+                // The content outline is in local space. On this view it stays axis-aligned
+                // and cuts the rotated snapshot into a polygon.
+                setClipToOutline(false);
+                setClipChildren(false);
+                setClipToPadding(false);
+                view.setClipToOutline(mContent.getClipToOutline());
+                view.setOutlineProvider(mContent.getOutlineProvider());
+            } else {
+                setClipToOutline(mContent.getClipToOutline());
+                setOutlineProvider(mContent.getOutlineProvider());
+            }
             addViewInLayout(view, indexOfChild(mContent), mContent.getLayoutParams(), true);
 
             removeViewInLayout(mContent);

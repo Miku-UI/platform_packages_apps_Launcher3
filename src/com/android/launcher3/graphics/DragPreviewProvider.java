@@ -177,6 +177,17 @@ public class DragPreviewProvider {
             scale /= ((LauncherAppWidgetHostView) mView).getScaleToFit();
         }
 
+        // DragView hosts this view and keeps its rotation. The rotated local origin is not
+        // the layout origin, so positioning there slides the widget onto another cell.
+        if (view == mView && mView.getRotation() != 0f && mView.getParent() instanceof View parent) {
+            float[] origin = new float[] {mView.getX(), mView.getY()};
+            ActivityContext.lookupContext(mView.getContext()).getDragLayer()
+                    .getDescendantCoordRelativeToSelf(parent, origin);
+            outPos[0] = Math.round(origin[0]);
+            outPos[1] = Math.round(origin[1]);
+            return scale;
+        }
+
         outPos[0] = Math.round(outPos[0]
                 - (view.getWidth() - scale * mView.getWidth() * mView.getScaleX()) / 2);
         outPos[1] = Math.round(outPos[1] - (1 - scale) * view.getHeight() / 2 - previewPadding / 2);

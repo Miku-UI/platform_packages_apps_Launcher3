@@ -33,6 +33,8 @@ import com.android.launcher3.dragndrop.DraggableView;
 import com.android.launcher3.folder.PreviewBackground;
 import com.android.launcher3.logging.FileLog;
 import com.android.launcher3.model.data.ItemInfo;
+import com.android.launcher3.util.MultiTranslateDelegate;
+import com.android.launcher3.widget.LauncherAppWidgetHostView;
 import com.android.launcher3.util.IntSet;
 
 import java.io.File;
@@ -337,8 +339,18 @@ public final class WorkspaceFreeMode {
         if (view.getTranslationX() == 0f && view.getTranslationY() == 0f) {
             return;
         }
-        int x = Math.round(view.getX());
-        int y = Math.round(view.getY());
+        // Widget centering lives in its own translation slot. The drag adds to the view
+        // translation, so the stored top-left is the visual position minus that slot.
+        float centeringX = 0f;
+        float centeringY = 0f;
+        if (view instanceof LauncherAppWidgetHostView host) {
+            centeringX = host.getTranslateDelegate()
+                    .getTranslationX(MultiTranslateDelegate.INDEX_WIDGET_CENTERING).getValue();
+            centeringY = host.getTranslateDelegate()
+                    .getTranslationY(MultiTranslateDelegate.INDEX_WIDGET_CENTERING).getValue();
+        }
+        int x = Math.round(view.getX() - centeringX);
+        int y = Math.round(view.getY() - centeringY);
         view.setTranslationX(0f);
         view.setTranslationY(0f);
         writeFreePosition(info, view, container, layout, x, y, info.screenId);
@@ -689,7 +701,7 @@ public final class WorkspaceFreeMode {
         return Math.round(norm * (float) size / NORM);
     }
 
-    /** Desktop icons and folders in free layout. Widgets keep the cell resize frame. */
+    /** Desktop icons and folders in free layout. Widgets rotate from the resize frame. */
     public static boolean canTransform(View view) {
         if (view == null || !view.isAttachedToWindow() || view.getWidth() <= 0
                 || view.getHeight() <= 0 || !isEnabled(view.getContext())) {
@@ -730,6 +742,10 @@ public final class WorkspaceFreeMode {
 
     /** Applies the stored glyph transform, or clears it when free layout is off. */
     public static void applyIconTransform(View child) {
+        if (child instanceof LauncherAppWidgetHostView) {
+            applyWidgetRotation(child);
+            return;
+        }
         if (!(child instanceof FreeIconTransformHost host)) {
             return;
         }
@@ -742,6 +758,25 @@ public final class WorkspaceFreeMode {
             rotation = Float.isNaN(info.freeRotation) ? DEFAULT_ICON_ROTATION : info.freeRotation;
         }
         host.setFreeIconTransform(scale, rotation);
+    }
+
+    private static final Rect sWidgetPivot = new Rect();
+
+    /** Rotation only. Widgets keep scale 1; the resize frame still changes their span. */
+    public static void applyWidgetRotation(View child) {
+        float rotation = DEFAULT_ICON_ROTATION;
+        if (isEnabled(child.getContext())
+                && child.getTag() instanceof ItemInfo info
+                && info.container == Favorites.CONTAINER_DESKTOP) {
+            rotation = sanitizeRotation(info.freeRotation);
+        }
+        int width = child.getWidth() > 0 ? child.getWidth() : child.getMeasuredWidth();
+        int height = child.getHeight() > 0 ? child.getHeight() : child.getMeasuredHeight();
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        sWidgetPivot.set(0, 0, width, height);
+        applyTransformToView(child, sWidgetPivot, DEFAULT_ICON_SCALE, rotation);
     }
 
     /**

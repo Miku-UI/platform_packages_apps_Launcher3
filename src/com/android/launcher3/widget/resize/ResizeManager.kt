@@ -18,6 +18,7 @@ package com.android.launcher3.widget.resize
 
 import android.appwidget.AppWidgetProviderInfo
 import android.graphics.Rect
+import android.view.View
 import android.view.ViewGroup
 import androidx.compose.ui.geometry.Offset
 import androidx.core.view.children
@@ -42,8 +43,10 @@ import com.android.launcher3.widget.LauncherAppWidgetProviderInfo
 import com.android.launcher3.widget.PendingAppWidgetHostView
 import com.android.launcher3.widget.util.WidgetSizeHandler.Companion.updateSizeRanges
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 
 /** Responsible for managing widget's size, evaluating and performing the resize operations. */
 class ResizeManager(
@@ -131,11 +134,41 @@ class ResizeManager(
             .log(LauncherEvent.LAUNCHER_WIDGET_RESIZE_STARTED)
     }
 
+    /**
+     * Drag amount from the resize frame, whose coordinates rotate with the widget, as movement
+     * in drag-layer axes. Span changes follow the grid, not the widget's local edges.
+     */
+    fun screenDragDelta(delta: Offset): Offset {
+        val degrees = widgetView.rotation
+        if (degrees == 0f) {
+            return delta
+        }
+        val radians = Math.toRadians(degrees.toDouble())
+        val c = cos(radians).toFloat()
+        val s = sin(radians).toFloat()
+        return Offset(delta.x * c - delta.y * s, delta.x * s + delta.y * c)
+    }
+
     /** Returns the current bounds of the widget. */
     fun getCurrentWidgetBounds(): Rect {
         val bounds = Rect()
         val scale = widgetView.scaleToFit
-        dragLayer.getViewRectRelativeToSelf(widgetView, bounds)
+        // getViewRectRelativeToSelf places the rect at the rotated local origin. The frame is
+        // the layout box, then rotated about its center to meet the widget.
+        val parent = widgetView.parent
+        if (widgetView.rotation != 0f && parent is View) {
+            val origin =
+                floatArrayOf(
+                    widgetView.x + widgetView.pivotX * (1f - widgetView.scaleX),
+                    widgetView.y + widgetView.pivotY * (1f - widgetView.scaleY),
+                )
+            dragLayer.getDescendantCoordRelativeToSelf(parent, origin)
+            val left = Math.round(origin[0])
+            val top = Math.round(origin[1])
+            bounds.set(left, top, left + widgetView.measuredWidth, top + widgetView.measuredHeight)
+        } else {
+            dragLayer.getViewRectRelativeToSelf(widgetView, bounds)
+        }
 
         val scaledWidth = Math.round(scale * bounds.width())
         val scaledHeight = Math.round(scale * bounds.height())
