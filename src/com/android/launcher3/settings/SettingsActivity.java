@@ -25,11 +25,8 @@ import static com.android.launcher3.BuildConfig.IS_STUDIO_BUILD;
 import static com.android.launcher3.InvariantDeviceProfile.TYPE_MULTI_DISPLAY;
 import static com.android.launcher3.InvariantDeviceProfile.TYPE_TABLET;
 import static com.android.launcher3.util.Executors.MAIN_EXECUTOR;
-import static com.android.launcher3.util.Executors.MODEL_EXECUTOR;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.LauncherApps;
@@ -57,9 +54,6 @@ import androidx.preference.PreferenceScreen;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.launcher3.BuildConfig;
-import com.android.launcher3.LauncherAppState;
-import com.android.launcher3.LauncherPrefs;
-import com.android.launcher3.WorkspaceFreeMode;
 import com.android.launcher3.InvariantDeviceProfile;
 import com.android.launcher3.LauncherFiles;
 import com.android.launcher3.R;
@@ -323,38 +317,6 @@ public class SettingsActivity extends FragmentActivity
                 case KEY_MINUS_ONE:
                     return launcherApps != null &&
                             launcherApps.isPackageEnabled(SEARCH_PACKAGE, myUserHandle());
-                case WorkspaceFreeMode.PREF_KEY:
-                    preference.setOnPreferenceChangeListener((pref, newValue) -> {
-                        boolean enabled = Boolean.TRUE.equals(newValue);
-                        Context app = getContext().getApplicationContext();
-                        LauncherPrefs.get(app).putSync(
-                                LauncherPrefs.WORKSPACE_FREE_MODE.to(enabled));
-                        MODEL_EXECUTOR.execute(() -> {
-                            LauncherAppState.getInstance(app).getModel()
-                                    .getModelDbController().switchActiveStore();
-                            MAIN_EXECUTOR.execute(() ->
-                                    LauncherAppState.getInstance(app).getModel()
-                                            .forceReload("workspace_free_mode"));
-                        });
-                        return true;
-                    });
-                    return true;
-                case WorkspaceFreeMode.PREF_CLEAR_KEY:
-                    preference.setOnPreferenceClickListener(pref -> {
-                        Context context = getContext();
-                        if (context == null) {
-                            return true;
-                        }
-                        new AlertDialog.Builder(context)
-                                .setTitle(R.string.workspace_free_mode_clear_title)
-                                .setMessage(R.string.workspace_free_mode_clear_warning)
-                                .setNegativeButton(android.R.string.cancel, null)
-                                .setPositiveButton(R.string.workspace_free_mode_clear_confirm,
-                                        (dialog, which) -> clearFreeLayoutStore(context))
-                                .show();
-                        return true;
-                    });
-                    return true;
                 case FIXED_LANDSCAPE_MODE:
                     if ((InvariantDeviceProfile.INSTANCE.get(getContext()).deviceType
                                     == TYPE_MULTI_DISPLAY)
@@ -377,18 +339,6 @@ public class SettingsActivity extends FragmentActivity
                     return !info.isLargeScreen(info.realBounds);
             }
             return true;
-        }
-
-        private void clearFreeLayoutStore(Context context) {
-            Context app = context.getApplicationContext();
-            MODEL_EXECUTOR.execute(() -> {
-                LauncherAppState.getInstance(app).getModel()
-                        .getModelDbController().clearFreeStore();
-                if (WorkspaceFreeMode.isEnabled(app)) {
-                    MAIN_EXECUTOR.execute(() -> LauncherAppState.getInstance(app).getModel()
-                            .forceReload("workspace_free_mode_clear"));
-                }
-            });
         }
 
         @Override

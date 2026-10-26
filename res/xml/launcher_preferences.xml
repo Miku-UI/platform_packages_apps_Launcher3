@@ -37,19 +37,6 @@
         launcher:logIdOn="613"
         launcher:logIdOff="614" />
 
-    <SwitchPreference
-        android:key="pref_workspace_free_mode"
-        android:title="@string/workspace_free_mode_title"
-        android:summary="@string/workspace_free_mode_description"
-        android:defaultValue="false"
-        android:persistent="true" />
-
-    <Preference
-        android:key="pref_clear_workspace_free_mode"
-        android:title="@string/workspace_free_mode_clear_title"
-        android:summary="@string/workspace_free_mode_clear_description"
-        android:persistent="false" />
-
     <!--
       LAUNCHER_HOME_SCREEN_ROTATION_ENABLED(615)
       LAUNCHER_HOME_SCREEN_ROTATION_DISABLED(616)
